@@ -6,8 +6,7 @@ namespace PowerFlow.Core.Parsing;
 
 public static class MatpowerParser
 {
-    public static PowerNetwork ParseFile(string path) =>
-        Parse(File.ReadAllText(path));
+    public static PowerNetwork ParseFile(string path) => Parse(File.ReadAllText(path));
 
     public static PowerNetwork Parse(string content)
     {
@@ -60,8 +59,7 @@ public static class MatpowerParser
             if (string.IsNullOrWhiteSpace(s))
                 continue;
 
-            yield return s
-                .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            yield return s.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
                 .Select(v => double.Parse(v, CultureInfo.InvariantCulture))
                 .ToArray();
         }
