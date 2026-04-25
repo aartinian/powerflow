@@ -7,8 +7,8 @@ public class Bus
     public BusType Type { get; }
     public double Pd { get; } // MW   load demand
     public double Qd { get; } // MVAr load demand
-    public double Gs { get; } // pu   shunt conductance  (MW   absorbed at V = 1 pu)
-    public double Bs { get; } // pu   shunt susceptance  (MVAr injected  at V = 1 pu)
+    public double Gs { get; } // MW   — divide by baseMVA when building Y-bus
+    public double Bs { get; } // MVAr — divide by baseMVA when building Y-bus
     public double Vm { get; } // pu   initial voltage magnitude (used as solver flat-start)
     public double Va { get; } // deg  initial voltage angle
     public double BaseKv { get; } // kV   base voltage — per-unit reference, used for reporting only
