@@ -45,6 +45,29 @@ public class SolverValidationTests
         );
     }
 
+    [Fact]
+    public void Solve_Case14_FlatStart_BranchFlowCount()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(20, result.BranchFlows.Count); // all 20 case14 branches are in-service
+    }
+
+    [Fact]
+    public void Solve_Case14_FlatStart_NoNegativeLosses()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        // Real losses P_ij + P_ji = R·|I|² ≥ 0 for every branch.
+        foreach (var bf in result.BranchFlows)
+            Assert.True(
+                bf.Pij + bf.Pji >= -1e-6,
+                $"Negative losses on branch {bf.FromBusId}→{bf.ToBusId}: {bf.Pij + bf.Pji:e3} pu"
+            );
+    }
+
     [Theory]
     [InlineData(0)] // slack
     [InlineData(1)] // PV

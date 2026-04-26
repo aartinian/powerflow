@@ -7,13 +7,15 @@ public class PowerFlowResult
     public double MaxMismatch { get; } // pu — mismatch at the last NR iteration
     public double[] Vm { get; } // pu, indexed by network.Buses order
     public double[] Va { get; } // degrees, indexed by network.Buses order
+    public IReadOnlyList<BranchFlow> BranchFlows { get; } // one entry per in-service branch
 
     public PowerFlowResult(
         bool converged,
         int iterations,
         double maxMismatch,
         double[] vm,
-        double[] va
+        double[] va,
+        IReadOnlyList<BranchFlow> branchFlows
     )
     {
         Converged = converged;
@@ -21,5 +23,6 @@ public class PowerFlowResult
         MaxMismatch = maxMismatch;
         Vm = vm;
         Va = va;
+        BranchFlows = branchFlows;
     }
 }

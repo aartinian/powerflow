@@ -1,6 +1,7 @@
-using MathNet.Numerics.LinearAlgebra;
+using System.Numerics;
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Network;
+using LA = MathNet.Numerics.LinearAlgebra;
 
 namespace PowerFlow.Core.Solver;
 
@@ -56,7 +57,7 @@ public class NewtonRaphsonSolver
         int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
 
         if (jDim == 0)
-            return MakeResult(true, 0, new double[n], new double[n], 0.0); // single slack bus
+            return MakeResult(network, true, 0, new double[n], new double[n], 0.0); // single slack bus
 
         // Scheduled net injection in pu: sum of generator outputs minus load at each bus.
         var Psch = new double[n];
@@ -102,7 +103,7 @@ public class NewtonRaphsonSolver
 
             mismatch = f.Max(v => Math.Abs(v));
             if (mismatch < Tolerance)
-                return MakeResult(true, iter, Vm, Va, mismatch);
+                return MakeResult(network, true, iter, Vm, Va, mismatch);
 
             var J = BuildJacobian(G, B, Vm, Va, P, Q, pvpq, pqList);
             var dx = SolveLinear(J, f);
@@ -116,7 +117,7 @@ public class NewtonRaphsonSolver
                 Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
         }
 
-        return MakeResult(false, MaxIterations, Vm, Va, mismatch);
+        return MakeResult(network, false, MaxIterations, Vm, Va, mismatch);
     }
 
     private static (double[] P, double[] Q) ComputeInjections(
@@ -216,9 +217,49 @@ public class NewtonRaphsonSolver
     }
 
     private static double[] SolveLinear(double[,] A, double[] b) =>
-        Matrix<double>.Build.DenseOfArray(A).Solve(Vector<double>.Build.Dense(b)).ToArray();
+        LA.Matrix<double>.Build.DenseOfArray(A).Solve(LA.Vector<double>.Build.Dense(b)).ToArray();
+
+    private static IReadOnlyList<BranchFlow> ComputeBranchFlows(
+        PowerNetwork network,
+        double[] Vm,
+        double[] Va
+    )
+    {
+        var flows = new List<BranchFlow>();
+
+        foreach (var br in network.Branches)
+        {
+            if (!br.IsInService)
+                continue;
+
+            int i = network.IndexOf(br.FromBus);
+            int j = network.IndexOf(br.ToBus);
+
+            var ys = Complex.One / new Complex(br.R, br.X);
+            var yc = new Complex(0.0, br.B / 2.0);
+
+            double phi = br.PhaseShift * Math.PI / 180.0;
+            var t = new Complex(br.TapRatio * Math.Cos(phi), br.TapRatio * Math.Sin(phi));
+            double tMagSq = br.TapRatio * br.TapRatio;
+
+            var Vi = Complex.FromPolarCoordinates(Vm[i], Va[i]);
+            var Vj = Complex.FromPolarCoordinates(Vm[j], Va[j]);
+
+            // Same π model as YBusBuilder
+            var Iij = ((ys + yc) / tMagSq) * Vi - (ys / Complex.Conjugate(t)) * Vj;
+            var Iji = -(ys / t) * Vi + (ys + yc) * Vj;
+
+            var Sij = Vi * Complex.Conjugate(Iij);
+            var Sji = Vj * Complex.Conjugate(Iji);
+
+            flows.Add(new BranchFlow(br.FromBus, br.ToBus, Sij.Real, Sij.Imaginary, Sji.Real, Sji.Imaginary));
+        }
+
+        return flows;
+    }
 
     private static PowerFlowResult MakeResult(
+        PowerNetwork network,
         bool converged,
         int iter,
         double[] Vm,
@@ -226,7 +267,8 @@ public class NewtonRaphsonSolver
         double mismatch
     )
     {
+        var flows = ComputeBranchFlows(network, Vm, Va);
         var vaDeg = Va.Select(a => a * 180.0 / Math.PI).ToArray();
-        return new PowerFlowResult(converged, iter, mismatch, (double[])Vm.Clone(), vaDeg);
+        return new PowerFlowResult(converged, iter, mismatch, (double[])Vm.Clone(), vaDeg, flows);
     }
 }

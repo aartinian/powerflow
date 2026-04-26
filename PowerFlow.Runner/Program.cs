@@ -1,8 +1,6 @@
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
-// Start from the MATPOWER solution stored in case14.m.
-// If the network data is correct, the initial mismatch is already < 1e-6 and the solver returns in 0 steps.
 var path = Path.Combine(
     AppContext.BaseDirectory,
     "..",
@@ -11,19 +9,26 @@ var path = Path.Combine(
     "..",
     "PowerFlow.Tests",
     "Data",
-    "case14.m"
+    "case14_flatstart.m"
 );
+
 var net = MatpowerParser.ParseFile(path);
 var result = new NewtonRaphsonSolver().Solve(net);
 
 Console.WriteLine(
-    $"Converged: {result.Converged}  Iterations: {result.Iterations}  MaxMismatch: {result.MaxMismatch:e6}"
+    $"Converged: {result.Converged}  Iterations: {result.Iterations}  MaxMismatch: {result.MaxMismatch:e3} pu"
 );
+
+Console.WriteLine();
+Console.WriteLine($"{"Bus",-4} {"Vm (pu)",-10} {"Va (deg)",-10}");
+for (int i = 0; i < net.Buses.Count; i++)
+    Console.WriteLine($"{net.Buses[i].Id,-4} {result.Vm[i],-10:F4} {result.Va[i],-10:F3}");
+
 Console.WriteLine();
 Console.WriteLine(
-    $"{"Bus", -4} {"Vm solver", -12} {"Vm case14", -12} {"Va solver", -12} {"Va case14", -12}"
+    $"{"From",-5} {"To",-5} {"P_ij (pu)",-12} {"Q_ij (pu)",-12} {"P_ji (pu)",-12} {"Q_ji (pu)",-12}"
 );
-for (int i = 0; i < net.Buses.Count; i++)
+foreach (var bf in result.BranchFlows)
     Console.WriteLine(
-        $"{net.Buses[i].Id, -4} {result.Vm[i], -12:F6} {net.Buses[i].Vm, -12:F6} {result.Va[i], -12:F4} {net.Buses[i].Va, -12:F4}"
+        $"{bf.FromBusId,-5} {bf.ToBusId,-5} {bf.Pij,-12:F4} {bf.Qij,-12:F4} {bf.Pji,-12:F4} {bf.Qji,-12:F4}"
     );
