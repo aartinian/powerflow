@@ -1,7 +1,9 @@
 using System.Numerics;
+using CSparse;
+using CSparse.Double.Factorization;
+using CSparse.Storage;
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Network;
-using LA = MathNet.Numerics.LinearAlgebra;
 
 namespace PowerFlow.Core.Solver;
 
@@ -220,7 +222,7 @@ public class NewtonRaphsonSolver
         return (P, Q);
     }
 
-    private static double[,] BuildJacobian(
+    private static CompressedColumnStorage<double> BuildJacobian(
         SparseYbus ybus,
         double[] Vm,
         double[] Va,
@@ -233,7 +235,6 @@ public class NewtonRaphsonSolver
         int npvpq = pvpq.Count;
         int npq = pq.Count;
         int m = npvpq + npq;
-        var J = new double[m, m];
 
         // Fast lookup: bus array index → Jacobian row/col position (-1 if not present).
         var pvpqPos = new int[ybus.N];
@@ -245,8 +246,11 @@ public class NewtonRaphsonSolver
         for (int k = 0; k < npq; k++)
             pqPos[pq[k]] = k;
 
-        // Off-diagonal: iterate Ybus non-zeros, fill up to 4 Jacobian entries per (i,j) pair.
-        // The Jacobian has the same sparsity pattern as Ybus restricted to pvpq/pq rows and cols.
+        // Capacity: each Ybus off-diagonal non-zero produces ≤4 J entries; diagonals add m+npq.
+        int capacity = ybus.OffDiag.Sum(r => r.Length) * 4 + m + npq * 2;
+        var triplets = new CoordinateStorage<double>(m, m, capacity);
+
+        // Off-diagonal: iterate Ybus non-zeros, emit up to 4 Jacobian entries per (i,j) pair.
         for (int i = 0; i < ybus.N; i++)
         {
             int pr = pvpqPos[i]; // row in P-block
@@ -271,16 +275,16 @@ public class NewtonRaphsonSolver
                 if (pr >= 0)
                 {
                     if (tc >= 0)
-                        J[pr, tc] += h; // H: ∂P_i/∂θ_j
+                        triplets.At(pr, tc, h); // H: ∂P_i/∂θ_j
                     if (vc >= 0)
-                        J[pr, npvpq + vc] += nv; // N: Vj·∂P_i/∂Vj
+                        triplets.At(pr, npvpq + vc, nv); // N: Vj·∂P_i/∂Vj
                 }
                 if (qr >= 0)
                 {
                     if (tc >= 0)
-                        J[npvpq + qr, tc] -= nv; // M: ∂Q_i/∂θ_j
+                        triplets.At(npvpq + qr, tc, -nv); // M: ∂Q_i/∂θ_j
                     if (vc >= 0)
-                        J[npvpq + qr, npvpq + vc] += h; // L: Vj·∂Q_i/∂Vj
+                        triplets.At(npvpq + qr, npvpq + vc, h); // L: Vj·∂Q_i/∂Vj
                 }
             }
         }
@@ -290,25 +294,30 @@ public class NewtonRaphsonSolver
         {
             int i = pvpq[k];
             double Vi2 = Vm[i] * Vm[i];
-            J[k, k] = -Q[i] - ybus.Bd[i] * Vi2; // H_ii
+            triplets.At(k, k, -Q[i] - ybus.Bd[i] * Vi2); // H_ii
 
             int vc = pqPos[i];
             if (vc >= 0)
-                J[k, npvpq + vc] = P[i] + ybus.Gd[i] * Vi2; // N_ii
+                triplets.At(k, npvpq + vc, P[i] + ybus.Gd[i] * Vi2); // N_ii
         }
         for (int k = 0; k < npq; k++)
         {
             int i = pq[k];
             double Vi2 = Vm[i] * Vm[i];
-            J[npvpq + k, pvpqPos[i]] = P[i] - ybus.Gd[i] * Vi2; // M_ii
-            J[npvpq + k, npvpq + k] = Q[i] - ybus.Bd[i] * Vi2; // L_ii
+            triplets.At(npvpq + k, pvpqPos[i], P[i] - ybus.Gd[i] * Vi2); // M_ii
+            triplets.At(npvpq + k, npvpq + k, Q[i] - ybus.Bd[i] * Vi2); // L_ii
         }
 
-        return J;
+        // sumDuplicates=true handles parallel branches.
+        return CompressedColumnStorage<double>.OfIndexed(triplets, true);
     }
 
-    private static double[] SolveLinear(double[,] A, double[] b) =>
-        LA.Matrix<double>.Build.DenseOfArray(A).Solve(LA.Vector<double>.Build.Dense(b)).ToArray();
+    private static double[] SolveLinear(CompressedColumnStorage<double> A, double[] b)
+    {
+        var x = new double[b.Length];
+        SparseLU.Create(A, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(b, x);
+        return x;
+    }
 
     private static IReadOnlyList<BranchFlow> ComputeBranchFlows(
         PowerNetwork network,
