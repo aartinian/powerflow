@@ -46,6 +46,42 @@ public class SolverValidationTests
     }
 
     [Fact]
+    public void Solve_Case14_FlatStart_SlackBusPg()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        // MATPOWER reference: slack bus (bus 1) generates 232.4 MW = 2.324 pu
+        Assert.Equal(2.324, result.Pg[0], 2); // ±0.005 pu
+    }
+
+    [Fact]
+    public void Solve_Case14_FlatStart_PVBusQg()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        // MATPOWER runpf result: bus 2 Qg = 43.56 MVAr = 0.4356 pu
+        // (The 42.4 MVAr stored in case14.m gen data is the initial dispatch, not the PF solution.)
+        Assert.Equal(0.4356, result.Qg[1], 3); // ±0.0005 pu
+    }
+
+    [Fact]
+    public void Solve_Case14_QLimitSwitch_Bus2AtCeiling()
+    {
+        // Gen 2 Qmax = 20 MVAr; natural Qg ≈ 42 MVAr → bus 2 must switch PV→PQ.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.True(result.Converged);
+        Assert.Equal(0.200, result.Qg[1], 3); // Qg pinned at Qmax = 20 MVAr = 0.200 pu
+        Assert.True(
+            result.Vm[1] < 1.045, // voltage no longer held by PV constraint
+            $"Expected bus 2 Vm < 1.045 after switch, got {result.Vm[1]:F4}"
+        );
+    }
+
+    [Fact]
     public void Solve_Case14_FlatStart_BranchFlowCount()
     {
         var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));

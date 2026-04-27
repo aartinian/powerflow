@@ -9,13 +9,14 @@ public class NewtonRaphsonSolver
 {
     public double Tolerance { get; init; } = 1e-6; // pu — matches MATPOWER default
     public int MaxIterations { get; init; } = 50;
+    public bool EnforceLimits { get; init; } = true;
 
     public PowerFlowResult Solve(PowerNetwork network)
     {
         var Ybus = YBusBuilder.Build(network);
         int n = network.Buses.Count;
 
-        // Cache real and imaginary parts separately
+        // Cache real and imaginary parts separately — avoids Complex struct overhead in hot loops.
         var G = new double[n, n];
         var B = new double[n, n];
         for (int i = 0; i < n; i++)
@@ -25,7 +26,6 @@ public class NewtonRaphsonSolver
             B[i, j] = Ybus[i, j].Imaginary;
         }
 
-        // Classify buses into slack / PV / PQ.
         int slackIdx = -1;
         var pvList = new List<int>();
         var pqList = new List<int>();
@@ -49,16 +49,6 @@ public class NewtonRaphsonSolver
         if (slackIdx < 0)
             throw new InvalidOperationException("Network has no slack bus.");
 
-        // pvpq = all non-slack buses: PV first, then PQ.
-        // This ordering determines the row/column layout of the Jacobian.
-        var pvpq = pvList.Concat(pqList).ToList();
-        int npvpq = pvpq.Count;
-        int npq = pqList.Count;
-        int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
-
-        if (jDim == 0)
-            return MakeResult(network, true, 0, new double[n], new double[n], 0.0); // single slack bus
-
         // Scheduled net injection in pu: sum of generator outputs minus load at each bus.
         var Psch = new double[n];
         var Qsch = new double[n];
@@ -80,7 +70,6 @@ public class NewtonRaphsonSolver
         var Va = network.Buses.Select(b => b.Va * Math.PI / 180.0).ToArray();
 
         // Enforce generator voltage setpoints at PV and slack buses.
-        // Bus.Vm from the case file may differ from Vg if the file stores solved results.
         foreach (var gen in network.Generators.Where(g => g.IsInService))
         {
             int i = network.IndexOf(gen.BusId);
@@ -88,36 +77,127 @@ public class NewtonRaphsonSolver
                 Vm[i] = gen.Vg;
         }
 
-        double mismatch = double.MaxValue;
-
-        for (int iter = 0; iter < MaxIterations; iter++)
+        // Per-bus Q limits (MVAr) for PV buses; summed when multiple generators share a bus.
+        // Buses without limits keep ±∞ so the comparison never fires.
+        var qMaxMvar = Enumerable.Repeat(double.PositiveInfinity, n).ToArray();
+        var qMinMvar = Enumerable.Repeat(double.NegativeInfinity, n).ToArray();
+        if (EnforceLimits)
         {
-            var (P, Q) = ComputeInjections(G, B, Vm, Va, n);
-
-            // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
-            var f = new double[jDim];
-            for (int k = 0; k < npvpq; k++)
-                f[k] = Psch[pvpq[k]] - P[pvpq[k]];
-            for (int k = 0; k < npq; k++)
-                f[npvpq + k] = Qsch[pqList[k]] - Q[pqList[k]];
-
-            mismatch = f.Max(v => Math.Abs(v));
-            if (mismatch < Tolerance)
-                return MakeResult(network, true, iter, Vm, Va, mismatch);
-
-            var J = BuildJacobian(G, B, Vm, Va, P, Q, pvpq, pqList);
-            var dx = SolveLinear(J, f);
-
-            // Apply correction.
-            // Angles: additive (Δθ in radians).
-            // Voltages: scaled update — dx holds ΔV/V, so ΔV = V·(ΔV/V).
-            for (int k = 0; k < npvpq; k++)
-                Va[pvpq[k]] += dx[k];
-            for (int k = 0; k < npq; k++)
-                Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
+            foreach (var gen in network.Generators.Where(g => g.IsInService))
+            {
+                int i = network.IndexOf(gen.BusId);
+                if (network.Buses[i].Type == BusType.PV)
+                {
+                    qMaxMvar[i] = double.IsPositiveInfinity(qMaxMvar[i])
+                        ? gen.Qmax
+                        : qMaxMvar[i] + gen.Qmax;
+                    qMinMvar[i] = double.IsNegativeInfinity(qMinMvar[i])
+                        ? gen.Qmin
+                        : qMinMvar[i] + gen.Qmin;
+                }
+            }
         }
 
-        return MakeResult(network, false, MaxIterations, Vm, Va, mismatch);
+        double[] P = new double[n];
+        double[] Q = new double[n];
+        double mismatch = double.MaxValue;
+        bool converged = false;
+        int iterations = MaxIterations;
+
+        bool limitViolated;
+        do
+        {
+            limitViolated = false;
+
+            // pvpq = all non-slack buses: PV first, then PQ (including any that were switched).
+            // This ordering determines the row/column layout of the Jacobian.
+            var pvpq = pvList.Concat(pqList).ToList();
+            int npvpq = pvpq.Count;
+            int npq = pqList.Count;
+            int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
+
+            if (jDim == 0)
+            {
+                // Single slack-bus network — nothing to solve.
+                (P, Q) = ComputeInjections(G, B, Vm, Va, n);
+                converged = true;
+                iterations = 0;
+                mismatch = 0.0;
+                break;
+            }
+
+            converged = false;
+
+            for (int iter = 0; iter < MaxIterations; iter++)
+            {
+                (P, Q) = ComputeInjections(G, B, Vm, Va, n);
+
+                // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
+                var f = new double[jDim];
+                for (int k = 0; k < npvpq; k++)
+                    f[k] = Psch[pvpq[k]] - P[pvpq[k]];
+                for (int k = 0; k < npq; k++)
+                    f[npvpq + k] = Qsch[pqList[k]] - Q[pqList[k]];
+
+                mismatch = f.Max(v => Math.Abs(v));
+                if (mismatch < Tolerance)
+                {
+                    converged = true;
+                    iterations = iter;
+                    break;
+                }
+
+                var J = BuildJacobian(G, B, Vm, Va, P, Q, pvpq, pqList);
+                var dx = SolveLinear(J, f);
+
+                // Apply correction.
+                // Angles: additive (Δθ in radians).
+                // Voltages: scaled update — dx holds ΔV/V, so ΔV = V·(ΔV/V).
+                for (int k = 0; k < npvpq; k++)
+                    Va[pvpq[k]] += dx[k];
+                for (int k = 0; k < npq; k++)
+                    Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
+            }
+
+            if (!converged)
+                break; // bail out of limit loop — report non-convergence as-is
+
+            if (EnforceLimits)
+            {
+                // Check reactive limits at every bus still classified as PV.
+                // Qg (MVAr) = net reactive injection × baseMVA + load reactive.
+                foreach (int i in pvList.ToList())
+                {
+                    double qgMvar = Q[i] * network.BaseMva + network.Buses[i].Qd;
+                    if (qgMvar > qMaxMvar[i])
+                    {
+                        Qsch[i] = (qMaxMvar[i] - network.Buses[i].Qd) / network.BaseMva;
+                        pvList.Remove(i);
+                        pqList.Add(i);
+                        limitViolated = true;
+                    }
+                    else if (qgMvar < qMinMvar[i])
+                    {
+                        Qsch[i] = (qMinMvar[i] - network.Buses[i].Qd) / network.BaseMva;
+                        pvList.Remove(i);
+                        pqList.Add(i);
+                        limitViolated = true;
+                    }
+                }
+            }
+        } while (limitViolated);
+
+        // Net generation at each bus in pu: Pgen = net injection + load.
+        // Zero for load-only buses (P[i] ≈ -Pd[i]/baseMVA → Pg[i] ≈ 0).
+        var pg = new double[n];
+        var qg = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            pg[i] = P[i] + network.Buses[i].Pd / network.BaseMva;
+            qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
+        }
+
+        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg);
     }
 
     private static (double[] P, double[] Q) ComputeInjections(
@@ -192,8 +272,8 @@ public class NewtonRaphsonSolver
 
                     J[r, c] = (pRow, thetaCol) switch
                     {
-                        (true, true) => VV * (Gij * sn - Bij * cs),   // H: ∂P_i/∂θ_j
-                        (true, false) => VV * (Gij * cs + Bij * sn),  // N: Vj·∂P_i/∂Vj
+                        (true, true) => VV * (Gij * sn - Bij * cs), // H: ∂P_i/∂θ_j
+                        (true, false) => VV * (Gij * cs + Bij * sn), // N: Vj·∂P_i/∂Vj
                         (false, true) => -VV * (Gij * cs + Bij * sn), // M: ∂Q_i/∂θ_j
                         (false, false) => VV * (Gij * sn - Bij * cs), // L: Vj·∂Q_i/∂Vj
                     };
@@ -204,9 +284,9 @@ public class NewtonRaphsonSolver
 
                     J[r, c] = (pRow, thetaCol) switch
                     {
-                        (true, true) => -Q[i] - B[i, i] * Vi2,  // H_ii
-                        (true, false) => P[i] + G[i, i] * Vi2,  // N_ii
-                        (false, true) => P[i] - G[i, i] * Vi2,  // M_ii
+                        (true, true) => -Q[i] - B[i, i] * Vi2, // H_ii
+                        (true, false) => P[i] + G[i, i] * Vi2, // N_ii
+                        (false, true) => P[i] - G[i, i] * Vi2, // M_ii
                         (false, false) => Q[i] - B[i, i] * Vi2, // L_ii
                     };
                 }
@@ -252,7 +332,16 @@ public class NewtonRaphsonSolver
             var Sij = Vi * Complex.Conjugate(Iij);
             var Sji = Vj * Complex.Conjugate(Iji);
 
-            flows.Add(new BranchFlow(br.FromBus, br.ToBus, Sij.Real, Sij.Imaginary, Sji.Real, Sji.Imaginary));
+            flows.Add(
+                new BranchFlow(
+                    br.FromBus,
+                    br.ToBus,
+                    Sij.Real,
+                    Sij.Imaginary,
+                    Sji.Real,
+                    Sji.Imaginary
+                )
+            );
         }
 
         return flows;
@@ -264,11 +353,22 @@ public class NewtonRaphsonSolver
         int iter,
         double[] Vm,
         double[] Va,
-        double mismatch
+        double mismatch,
+        double[] pg,
+        double[] qg
     )
     {
         var flows = ComputeBranchFlows(network, Vm, Va);
         var vaDeg = Va.Select(a => a * 180.0 / Math.PI).ToArray();
-        return new PowerFlowResult(converged, iter, mismatch, (double[])Vm.Clone(), vaDeg, flows);
+        return new PowerFlowResult(
+            converged,
+            iter,
+            mismatch,
+            (double[])Vm.Clone(),
+            vaDeg,
+            pg,
+            qg,
+            flows
+        );
     }
 }
