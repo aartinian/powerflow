@@ -1,16 +1,23 @@
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
-var path = Path.Combine(
-    AppContext.BaseDirectory,
-    "..",
-    "..",
-    "..",
-    "..",
-    "PowerFlow.Tests",
-    "Data",
-    "case14_flatstart.m"
-);
+string path;
+if (args.Length > 0)
+{
+    path = args[0];
+    if (!File.Exists(path))
+    {
+        Console.Error.WriteLine($"File not found: {path}");
+        return 1;
+    }
+}
+else
+{
+    path = Path.Combine(AppContext.BaseDirectory, "Data", "case14_flatstart.m");
+    Console.WriteLine($"No input file specified — running bundled IEEE 14-bus demo.");
+    Console.WriteLine($"Usage: PowerFlow.Runner <path-to-case.m>");
+    Console.WriteLine();
+}
 
 var net = MatpowerParser.ParseFile(path);
 var result = new NewtonRaphsonSolver().Solve(net);
@@ -46,3 +53,5 @@ foreach (var bf in result.BranchFlows)
     Console.WriteLine(
         $"{bf.FromBusId, -4}  {bf.ToBusId, -4}  {D(bf.Pij * mva), 10:F2}  {D(bf.Qij * mva), 12:F2}  {D(bf.Pji * mva), 10:F2}  {D(bf.Qji * mva), 12:F2}  {D((bf.Pij + bf.Pji) * mva), 10:F2}"
     );
+
+return 0;

@@ -9,4 +9,10 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerFlow.Core\PowerFlow.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Data\*.m">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
