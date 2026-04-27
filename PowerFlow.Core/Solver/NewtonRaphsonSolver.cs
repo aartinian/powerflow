@@ -13,18 +13,8 @@ public class NewtonRaphsonSolver
 
     public PowerFlowResult Solve(PowerNetwork network)
     {
-        var Ybus = YBusBuilder.Build(network);
-        int n = network.Buses.Count;
-
-        // Cache real and imaginary parts separately — avoids Complex struct overhead in hot loops.
-        var G = new double[n, n];
-        var B = new double[n, n];
-        for (int i = 0; i < n; i++)
-        for (int j = 0; j < n; j++)
-        {
-            G[i, j] = Ybus[i, j].Real;
-            B[i, j] = Ybus[i, j].Imaginary;
-        }
+        var ybus = YBusBuilder.Build(network);
+        int n = ybus.N;
 
         int slackIdx = -1;
         var pvList = new List<int>();
@@ -119,7 +109,7 @@ public class NewtonRaphsonSolver
             if (jDim == 0)
             {
                 // Single slack-bus network — nothing to solve.
-                (P, Q) = ComputeInjections(G, B, Vm, Va, n);
+                (P, Q) = ComputeInjections(ybus, Vm, Va);
                 converged = true;
                 iterations = 0;
                 mismatch = 0.0;
@@ -130,7 +120,7 @@ public class NewtonRaphsonSolver
 
             for (int iter = 0; iter < MaxIterations; iter++)
             {
-                (P, Q) = ComputeInjections(G, B, Vm, Va, n);
+                (P, Q) = ComputeInjections(ybus, Vm, Va);
 
                 // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
                 var f = new double[jDim];
@@ -147,7 +137,7 @@ public class NewtonRaphsonSolver
                     break;
                 }
 
-                var J = BuildJacobian(G, B, Vm, Va, P, Q, pvpq, pqList);
+                var J = BuildJacobian(ybus, Vm, Va, P, Q, pvpq, pqList);
                 var dx = SolveLinear(J, f);
 
                 // Apply correction.
@@ -201,33 +191,37 @@ public class NewtonRaphsonSolver
     }
 
     private static (double[] P, double[] Q) ComputeInjections(
-        double[,] G,
-        double[,] B,
+        SparseYbus ybus,
         double[] Vm,
-        double[] Va,
-        int n
+        double[] Va
     )
     {
+        int n = ybus.N;
         var P = new double[n];
         var Q = new double[n];
 
         for (int i = 0; i < n; i++)
-        for (int k = 0; k < n; k++)
         {
-            double theta = Va[i] - Va[k];
-            double VV = Vm[i] * Vm[k];
-            double cs = Math.Cos(theta);
-            double sn = Math.Sin(theta);
-            P[i] += VV * (G[i, k] * cs + B[i, k] * sn);
-            Q[i] += VV * (G[i, k] * sn - B[i, k] * cs);
+            double Vi2 = Vm[i] * Vm[i];
+            P[i] = ybus.Gd[i] * Vi2;
+            Q[i] = -ybus.Bd[i] * Vi2;
+
+            foreach (var (k, Gik, Bik) in ybus.OffDiag[i])
+            {
+                double theta = Va[i] - Va[k];
+                double VV = Vm[i] * Vm[k];
+                double cs = Math.Cos(theta);
+                double sn = Math.Sin(theta);
+                P[i] += VV * (Gik * cs + Bik * sn);
+                Q[i] += VV * (Gik * sn - Bik * cs);
+            }
         }
 
         return (P, Q);
     }
 
     private static double[,] BuildJacobian(
-        double[,] G,
-        double[,] B,
+        SparseYbus ybus,
         double[] Vm,
         double[] Va,
         double[] P,
@@ -241,56 +235,73 @@ public class NewtonRaphsonSolver
         int m = npvpq + npq;
         var J = new double[m, m];
 
-        // The Jacobian uses the scaled formulation: N = V·∂P/∂V, L = V·∂Q/∂V.
-        // This gives the cleaner diagonal formulas below and pairs with the V·e voltage update.
-        //
-        // Block layout:
-        //   [H  N]   rows: pvpq for P eqs,  pvpq for P eqs
-        //   [M  L]   rows: pq   for Q eqs,  pq   for Q eqs
-        //            cols: pvpq for Δθ,      pq   for ΔV/V
-        for (int r = 0; r < m; r++)
+        // Fast lookup: bus array index → Jacobian row/col position (-1 if not present).
+        var pvpqPos = new int[ybus.N];
+        var pqPos = new int[ybus.N];
+        Array.Fill(pvpqPos, -1);
+        Array.Fill(pqPos, -1);
+        for (int k = 0; k < npvpq; k++)
+            pvpqPos[pvpq[k]] = k;
+        for (int k = 0; k < npq; k++)
+            pqPos[pq[k]] = k;
+
+        // Off-diagonal: iterate Ybus non-zeros, fill up to 4 Jacobian entries per (i,j) pair.
+        // The Jacobian has the same sparsity pattern as Ybus restricted to pvpq/pq rows and cols.
+        for (int i = 0; i < ybus.N; i++)
         {
-            bool pRow = r < npvpq;
-            int i = pRow ? pvpq[r] : pq[r - npvpq];
+            int pr = pvpqPos[i]; // row in P-block
+            int qr = pqPos[i]; // row offset in Q-block
+            if (pr < 0 && qr < 0)
+                continue; // slack bus — no Jacobian rows
 
-            for (int c = 0; c < m; c++)
+            foreach (var (j, Gij, Bij) in ybus.OffDiag[i])
             {
-                bool thetaCol = c < npvpq;
-                int j = thetaCol ? pvpq[c] : pq[c - npvpq];
+                int tc = pvpqPos[j]; // col in θ-block
+                int vc = pqPos[j]; // col in V-block
+                if (tc < 0 && vc < 0)
+                    continue; // j is slack — no Jacobian columns
 
-                double Vi = Vm[i];
-                double Vj = Vm[j];
-                double Gij = G[i, j];
-                double Bij = B[i, j];
                 double theta = Va[i] - Va[j];
+                double VV = Vm[i] * Vm[j];
+                double cs = Math.Cos(theta);
+                double sn = Math.Sin(theta);
+                double h = VV * (Gij * sn - Bij * cs); // shared by H and L
+                double nv = VV * (Gij * cs + Bij * sn); // shared by N and -M
 
-                if (i != j)
+                if (pr >= 0)
                 {
-                    double VV = Vi * Vj;
-                    double cs = Math.Cos(theta);
-                    double sn = Math.Sin(theta);
-
-                    J[r, c] = (pRow, thetaCol) switch
-                    {
-                        (true, true) => VV * (Gij * sn - Bij * cs), // H: ∂P_i/∂θ_j
-                        (true, false) => VV * (Gij * cs + Bij * sn), // N: Vj·∂P_i/∂Vj
-                        (false, true) => -VV * (Gij * cs + Bij * sn), // M: ∂Q_i/∂θ_j
-                        (false, false) => VV * (Gij * sn - Bij * cs), // L: Vj·∂Q_i/∂Vj
-                    };
+                    if (tc >= 0)
+                        J[pr, tc] += h; // H: ∂P_i/∂θ_j
+                    if (vc >= 0)
+                        J[pr, npvpq + vc] += nv; // N: Vj·∂P_i/∂Vj
                 }
-                else
+                if (qr >= 0)
                 {
-                    double Vi2 = Vi * Vi;
-
-                    J[r, c] = (pRow, thetaCol) switch
-                    {
-                        (true, true) => -Q[i] - B[i, i] * Vi2, // H_ii
-                        (true, false) => P[i] + G[i, i] * Vi2, // N_ii
-                        (false, true) => P[i] - G[i, i] * Vi2, // M_ii
-                        (false, false) => Q[i] - B[i, i] * Vi2, // L_ii
-                    };
+                    if (tc >= 0)
+                        J[npvpq + qr, tc] -= nv; // M: ∂Q_i/∂θ_j
+                    if (vc >= 0)
+                        J[npvpq + qr, npvpq + vc] += h; // L: Vj·∂Q_i/∂Vj
                 }
             }
+        }
+
+        // Diagonal entries use accumulated P[i]/Q[i] and the diagonal admittance.
+        for (int k = 0; k < npvpq; k++)
+        {
+            int i = pvpq[k];
+            double Vi2 = Vm[i] * Vm[i];
+            J[k, k] = -Q[i] - ybus.Bd[i] * Vi2; // H_ii
+
+            int vc = pqPos[i];
+            if (vc >= 0)
+                J[k, npvpq + vc] = P[i] + ybus.Gd[i] * Vi2; // N_ii
+        }
+        for (int k = 0; k < npq; k++)
+        {
+            int i = pq[k];
+            double Vi2 = Vm[i] * Vm[i];
+            J[npvpq + k, pvpqPos[i]] = P[i] - ybus.Gd[i] * Vi2; // M_ii
+            J[npvpq + k, npvpq + k] = Q[i] - ybus.Bd[i] * Vi2; // L_ii
         }
 
         return J;
