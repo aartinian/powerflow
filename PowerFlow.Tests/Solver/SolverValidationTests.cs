@@ -158,4 +158,32 @@ public class SolverValidationTests
         Assert.False(double.IsNaN(bf.LoadingPct));
         Assert.Equal(9.2, bf.LoadingPct, 1); // ±0.05 %
     }
+
+    // ─── Voltage violations ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_Case14_FlatStart_DetectsOvervoltageOnPVBuses()
+    {
+        // case14_flatstart.m has Vmax=1.06 for all buses.
+        // Generator setpoints for buses 6 (Vg=1.07) and 8 (Vg=1.09) exceed that limit;
+        // bus 7 (PQ, transformer-connected to bus 8) is pulled above 1.06 as well.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(3, result.VoltageViolations.Count);
+        Assert.All(result.VoltageViolations, v => Assert.True(v.IsOverVoltage));
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 6);
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 7);
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 8);
+    }
+
+    [Fact]
+    public void Solve_Case30_NoVoltageViolations()
+    {
+        // case30.m uses Vmax=1.1 for PV buses; all generator setpoints are 1.0 pu — no violations.
+        var net = MatpowerParser.ParseFile(TestData.Path("case30.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Empty(result.VoltageViolations);
+    }
 }

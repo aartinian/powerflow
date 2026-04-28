@@ -57,4 +57,17 @@ foreach (var bf in result.BranchFlows)
     );
 }
 
+if (result.VoltageViolations.Count > 0)
+{
+    Console.WriteLine();
+    Console.WriteLine($"⚠  Voltage violations ({result.VoltageViolations.Count}):");
+    foreach (var v in result.VoltageViolations)
+    {
+        string kind = v.IsOverVoltage ? "over " : "under";
+        Console.WriteLine(
+            $"   Bus {v.BusId,-4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}–{v.Vmax:F3} pu)"
+        );
+    }
+}
+
 return 0;

@@ -381,6 +381,19 @@ public class NewtonRaphsonSolver
     {
         var flows = ComputeBranchFlows(network, Vm, Va);
         var vaDeg = Va.Select(a => a * 180.0 / Math.PI).ToArray();
+
+        // Voltage violations are only meaningful when the solver converged.
+        var violations = new List<VoltageViolation>();
+        if (converged)
+        {
+            for (int i = 0; i < network.Buses.Count; i++)
+            {
+                var bus = network.Buses[i];
+                if (Vm[i] < bus.Vmin || Vm[i] > bus.Vmax)
+                    violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax));
+            }
+        }
+
         return new PowerFlowResult(
             converged,
             iter,
@@ -389,7 +402,8 @@ public class NewtonRaphsonSolver
             vaDeg,
             pg,
             qg,
-            flows
+            flows,
+            violations
         );
     }
 }

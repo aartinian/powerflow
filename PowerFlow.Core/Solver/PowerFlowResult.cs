@@ -11,6 +11,12 @@ public class PowerFlowResult
     public double[] Qg { get; } // pu, net reactive generation at each bus
     public IReadOnlyList<BranchFlow> BranchFlows { get; } // one entry per in-service branch
 
+    /// <summary>
+    /// Buses whose solved Vm falls outside [Vmin, Vmax]. Empty when the solver did not converge
+    /// (voltages are meaningless) or when all buses are within limits.
+    /// </summary>
+    public IReadOnlyList<VoltageViolation> VoltageViolations { get; }
+
     public PowerFlowResult(
         bool converged,
         int iterations,
@@ -19,7 +25,8 @@ public class PowerFlowResult
         double[] va,
         double[] pg,
         double[] qg,
-        IReadOnlyList<BranchFlow> branchFlows
+        IReadOnlyList<BranchFlow> branchFlows,
+        IReadOnlyList<VoltageViolation> voltageViolations
     )
     {
         Converged = converged;
@@ -30,5 +37,6 @@ public class PowerFlowResult
         Pg = pg;
         Qg = qg;
         BranchFlows = branchFlows;
+        VoltageViolations = voltageViolations;
     }
 }
