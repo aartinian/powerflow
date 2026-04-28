@@ -24,10 +24,10 @@ public class YBusBuilderTests
         new(id, type, 0, 0, gs, bs, 1.0, 0.0, 1.0, 1.1, 0.9);
 
     private static Branch MakeLine(int from, int to, double r, double x, double b) =>
-        new(from, to, r, x, b, tapRatio: 0, phaseShift: 0, isInService: true);
+        new(from, to, r, x, b, tapRatio: 0, phaseShift: 0, rateA: 0, isInService: true);
 
     private static Branch MakeTransformer(int from, int to, double x, double tap) =>
-        new(from, to, 0, x, 0, tapRatio: tap, phaseShift: 0, isInService: true);
+        new(from, to, 0, x, 0, tapRatio: tap, phaseShift: 0, rateA: 0, isInService: true);
 
     // 2-bus, one transmission line: R=0.1 X=0.2 B=0.04
     // ys = 1/(0.1+j0.2) = 2-j4   yc = j0.02
@@ -122,7 +122,7 @@ public class YBusBuilderTests
     public void Build_OutOfServiceBranch_IsIgnored()
     {
         var buses = new[] { MakeBus(1, BusType.Slack), MakeBus(2) };
-        var branch = new Branch(1, 2, 0.1, 0.2, 0.04, 0, 0, isInService: false);
+        var branch = new Branch(1, 2, 0.1, 0.2, 0.04, 0, 0, rateA: 0, isInService: false);
         var Y = YBusBuilder.Build(new PowerNetwork(100, buses, new[] { branch }, []));
 
         AssertComplex(Complex.Zero, Y[0, 0]);

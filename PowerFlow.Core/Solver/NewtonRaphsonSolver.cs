@@ -359,7 +359,8 @@ public class NewtonRaphsonSolver
                     Sij.Real,
                     Sij.Imaginary,
                     Sji.Real,
-                    Sji.Imaginary
+                    Sji.Imaginary,
+                    rateA: br.RateA / network.BaseMva
                 )
             );
         }

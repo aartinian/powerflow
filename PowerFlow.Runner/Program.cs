@@ -44,14 +44,17 @@ for (int i = 0; i < net.Buses.Count; i++)
 
 Console.WriteLine();
 Console.WriteLine(
-    $"{"From", -4}  {"To", -4}  {"P_ij (MW)", 10}  {"Q_ij (MVAr)", 12}  {"P_ji (MW)", 10}  {"Q_ji (MVAr)", 12}  {"Loss (MW)", 10}"
+    $"{"From", -4}  {"To", -4}  {"P_ij (MW)", 10}  {"Q_ij (MVAr)", 12}  {"P_ji (MW)", 10}  {"Q_ji (MVAr)", 12}  {"Loss (MW)", 10}  {"Loading", 8}"
 );
 Console.WriteLine(
-    $"{"----", -4}  {"--", -4}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"------------", 12}  {"----------", 10}"
+    $"{"----", -4}  {"--", -4}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"--------", 8}"
 );
 foreach (var bf in result.BranchFlows)
+{
+    string loading = double.IsNaN(bf.LoadingPct) ? "      - " : $"{bf.LoadingPct, 7:F1}%";
     Console.WriteLine(
-        $"{bf.FromBusId, -4}  {bf.ToBusId, -4}  {D(bf.Pij * mva), 10:F2}  {D(bf.Qij * mva), 12:F2}  {D(bf.Pji * mva), 10:F2}  {D(bf.Qji * mva), 12:F2}  {D((bf.Pij + bf.Pji) * mva), 10:F2}"
+        $"{bf.FromBusId, -4}  {bf.ToBusId, -4}  {D(bf.Pij * mva), 10:F2}  {D(bf.Qij * mva), 12:F2}  {D(bf.Pji * mva), 10:F2}  {D(bf.Qji * mva), 12:F2}  {D((bf.Pij + bf.Pji) * mva), 10:F2}  {loading}"
     );
+}
 
 return 0;

@@ -133,4 +133,29 @@ public class SolverValidationTests
 
         Assert.Equal(Case14Reference[busIdx].Va, result.Va[busIdx], 2); // +/-0.005 degrees
     }
+
+    // ─── Branch loading ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_Case14_FlatStart_LoadingPct_UnconstrainedIsNaN()
+    {
+        // case14_flatstart.m has rateA=0 for all branches — loading % is undefined.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.All(result.BranchFlows, bf => Assert.True(double.IsNaN(bf.LoadingPct)));
+    }
+
+    [Fact]
+    public void Solve_Case30_LoadingPct_FirstBranch()
+    {
+        // Branch 1→2 in case30: rateA=130 MVA, baseMVA=100.
+        // From-end flow ≈ 10.89 MW, -5.09 MVAr → |S| ≈ 12.0 MVA → ~9.2 % loading.
+        var net = MatpowerParser.ParseFile(TestData.Path("case30.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        var bf = result.BranchFlows[0]; // branch 1→2
+        Assert.False(double.IsNaN(bf.LoadingPct));
+        Assert.Equal(9.2, bf.LoadingPct, 1); // ±0.05 %
+    }
 }

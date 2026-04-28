@@ -9,6 +9,7 @@ public class Branch
     public double B { get; } // pu total line charging susceptance (split equally at each end in π model)
     public double TapRatio { get; } // off-nominal turns ratio
     public double PhaseShift { get; } // deg transformer phase shift
+    public double RateA { get; } // MVA normal thermal rating (0 = unconstrained)
     public bool IsInService { get; }
 
     public Branch(
@@ -19,6 +20,7 @@ public class Branch
         double b,
         double tapRatio,
         double phaseShift,
+        double rateA,
         bool isInService
     )
     {
@@ -30,6 +32,7 @@ public class Branch
         // MATPOWER uses 0 to mean "no transformer"; normalise here so callers always get a real ratio.
         TapRatio = tapRatio == 0.0 ? 1.0 : tapRatio;
         PhaseShift = phaseShift;
+        RateA = rateA;
         IsInService = isInService;
     }
 }
