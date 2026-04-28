@@ -1,0 +1,233 @@
+@page "/"
+@rendermode InteractiveServer
+@using Microsoft.Extensions.Logging
+@inject IJSRuntime JS
+
+<PageTitle>PowerFlow — Solver</PageTitle>
+
+<div class="d-flex align-items-center gap-3 flex-wrap mb-4 pt-3">
+    <InputFile OnChange="HandleFile" accept=".m" class="form-control pf-file" />
+    <button class="pf-solve" @onclick="Solve" disabled="@(fileContent is null || busy)">
+        @(busy ? "Solving…" : "Solve")
+    </button>
+    @if (fileName is not null)
+    {
+        <span class="text-muted small">@fileName</span>
+    }
+</div>
+
+@if (error is not null)
+{
+    <div class="pf-banner pf-fail mb-3">@error</div>
+}
+
+@if (busy || logLines.Count > 0 || result is not null)
+{
+    <div class="row g-3">
+
+        <div class="col-12 col-lg-4">
+            <div class="pf-panel">
+                <div class="pf-panel-title">Solver Log</div>
+                <div class="pf-log" @ref="logPanel">
+                    @foreach (var (text, isWarn) in logLines)
+                    {
+                        <div class="@(isWarn ? "pf-warn" : "")">@text</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-8 d-flex flex-column gap-3">
+            @if (result is not null && network is not null)
+            {
+                <div class="pf-banner @(result.Converged ? "pf-ok" : "pf-fail")">
+                    @if (result.Converged)
+                    {
+                        <text>Converged in @(result.Iterations + 1) iterations — max mismatch @result.MaxMismatch.ToString("e2") pu</text>
+                    }
+                    else
+                    {
+                        <text>Did not converge — max mismatch @result.MaxMismatch.ToString("e2") pu</text>
+                    }
+                </div>
+
+                @if (result.VoltageViolations.Count > 0)
+                {
+                    <div class="pf-banner pf-warn-box">
+                        <strong>Voltage violations (@result.VoltageViolations.Count)</strong>
+                        <ul class="mb-0 mt-1">
+                            @foreach (var v in result.VoltageViolations)
+                            {
+                                <li>
+                                    Bus @v.BusId — @v.Vm.ToString("F4") pu
+                                    (@(v.IsOverVoltage ? "over" : "under")voltage,
+                                    limit @v.Vmin.ToString("F3")–@v.Vmax.ToString("F3") pu)
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="pf-panel">
+                    <div class="pf-tabs">
+                        <button class="pf-tab @(tab == "buses" ? "active" : "")"
+                                @onclick='() => tab = "buses"'>
+                            Buses (@network.Buses.Count)
+                        </button>
+                        <button class="pf-tab @(tab == "branches" ? "active" : "")"
+                                @onclick='() => tab = "branches"'>
+                            Branches (@result.BranchFlows.Count)
+                        </button>
+                    </div>
+                    <div class="pf-tbl-wrap">
+                        @if (tab == "buses")
+                        {
+                            <table class="table table-sm pf-tbl mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Bus</th>
+                                        <th class="text-end">Vm (pu)</th>
+                                        <th class="text-end">Va (°)</th>
+                                        <th class="text-end">Pg (MW)</th>
+                                        <th class="text-end">Qg (MVAr)</th>
+                                        <th class="text-end">Pd (MW)</th>
+                                        <th class="text-end">Qd (MVAr)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < network.Buses.Count; i++)
+                                    {
+                                        var bus = network.Buses[i];
+                                        <tr>
+                                            <td>@bus.Id</td>
+                                            <td class="text-end">@result.Vm[i].ToString("F4")</td>
+                                            <td class="text-end">@result.Va[i].ToString("F3")</td>
+                                            <td class="text-end">@Fmt(result.Pg[i] * network.BaseMva)</td>
+                                            <td class="text-end">@Fmt(result.Qg[i] * network.BaseMva)</td>
+                                            <td class="text-end">@bus.Pd.ToString("F1")</td>
+                                            <td class="text-end">@bus.Qd.ToString("F1")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <table class="table table-sm pf-tbl mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th class="text-end">P_ij (MW)</th>
+                                        <th class="text-end">Q_ij (MVAr)</th>
+                                        <th class="text-end">P_ji (MW)</th>
+                                        <th class="text-end">Q_ji (MVAr)</th>
+                                        <th class="text-end">Loss (MW)</th>
+                                        <th class="text-end">Loading</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var bf in result.BranchFlows)
+                                    {
+                                        var mva = network.BaseMva;
+                                        <tr>
+                                            <td>@bf.FromBusId</td>
+                                            <td>@bf.ToBusId</td>
+                                            <td class="text-end">@Fmt(bf.Pij * mva)</td>
+                                            <td class="text-end">@Fmt(bf.Qij * mva)</td>
+                                            <td class="text-end">@Fmt(bf.Pji * mva)</td>
+                                            <td class="text-end">@Fmt(bf.Qji * mva)</td>
+                                            <td class="text-end">@Fmt((bf.Pij + bf.Pji) * mva)</td>
+                                            <td class="text-end">
+                                                @(double.IsNaN(bf.LoadingPct)
+                                                    ? "—"
+                                                    : bf.LoadingPct.ToString("F1") + "%")
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    string? fileName;
+    string? fileContent;
+    bool busy;
+    string? error;
+    string tab = "buses";
+    PowerNetwork? network;
+    PowerFlowResult? result;
+    List<(string Text, bool IsWarn)> logLines = [];
+    ElementReference logPanel;
+    bool shouldScroll;
+
+    async Task HandleFile(InputFileChangeEventArgs e)
+    {
+        fileName = e.File.Name;
+        result = null;
+        error = null;
+        using var reader = new StreamReader(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+        fileContent = await reader.ReadToEndAsync();
+    }
+
+    async Task Solve()
+    {
+        if (fileContent is null) return;
+        busy = true;
+        error = null;
+        result = null;
+        logLines.Clear();
+
+        var logger = new SolverLogger(async (text, isWarn) =>
+        {
+            await InvokeAsync(() =>
+            {
+                logLines.Add((text, isWarn));
+                shouldScroll = true;
+                StateHasChanged();
+            });
+        });
+
+        try
+        {
+            var net = MatpowerParser.Parse(fileContent);
+            var res = await Task.Run(() => new NewtonRaphsonSolver { Log = logger }.Solve(net));
+            network = net;
+            result = res;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (shouldScroll)
+        {
+            shouldScroll = false;
+            await JS.InvokeVoidAsync("scrollToBottom", logPanel);
+        }
+    }
+
+    static string Fmt(double v) => (Math.Abs(v) < 1e-4 ? 0.0 : v).ToString("F1");
+
+    sealed class SolverLogger(Func<string, bool, Task> emit) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? ex,
+            Func<TState, Exception?, string> formatter) =>
+            _ = emit(formatter(state, ex), level >= LogLevel.Warning);
+    }
+}
