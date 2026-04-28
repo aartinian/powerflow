@@ -20,15 +20,12 @@ else
 }
 
 var net = MatpowerParser.ParseFile(path);
-var result = new NewtonRaphsonSolver().Solve(net);
+var result = new NewtonRaphsonSolver { Log = new ConsoleLogger() }.Solve(net);
+Console.WriteLine();
 double mva = net.BaseMva;
 
 // Clamp values smaller than 0.01 MW/MVAr to zero to suppress floating-point noise in display.
 static double D(double v) => Math.Abs(v) < 1e-4 ? 0.0 : v;
-
-Console.WriteLine(
-    $"Converged: {result.Converged}  Iterations: {result.Iterations}  MaxMismatch: {result.MaxMismatch:e2} pu"
-);
 
 Console.WriteLine();
 Console.WriteLine(
@@ -60,7 +57,7 @@ foreach (var bf in result.BranchFlows)
 if (result.VoltageViolations.Count > 0)
 {
     Console.WriteLine();
-    Console.WriteLine($"⚠  Voltage violations ({result.VoltageViolations.Count}):");
+    Console.WriteLine($"!!! Voltage violations ({result.VoltageViolations.Count}):");
     foreach (var v in result.VoltageViolations)
     {
         string kind = v.IsOverVoltage ? "over " : "under";
@@ -71,3 +68,25 @@ if (result.VoltageViolations.Count > 0)
 }
 
 return 0;
+
+// Minimal ILogger that writes directly to the console without any category/level prefix.
+// Warnings go to stderr so they stand out even when stdout is piped.
+sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
+
+    public void Log<TState>(
+        Microsoft.Extensions.Logging.LogLevel level,
+        Microsoft.Extensions.Logging.EventId id,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        string msg = formatter(state, exception);
+        if (level >= Microsoft.Extensions.Logging.LogLevel.Warning)
+            Console.Error.WriteLine(msg);
+        else
+            Console.WriteLine(msg);
+    }
+}
