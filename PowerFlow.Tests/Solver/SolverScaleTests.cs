@@ -93,4 +93,31 @@ public class SolverScaleTests
 
         Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu (reference values stored to 3 dp)
     }
+
+    // ─── IEEE 300-bus ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_Case300_FlatStart_Converges()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case300_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
+        Assert.True(
+            result.Iterations <= 15,
+            $"Took {result.Iterations} iterations (expected ≤ 15)"
+        );
+    }
+
+    [Theory]
+    [InlineData(0, 1.0284)] // bus 1   — PQ
+    [InlineData(49, 0.9918)] // bus 58  — PQ
+    [InlineData(299, 1.0402)] // bus 9533 — PQ (last bus)
+    public void Solve_Case300_FlatStart_VoltageMagnitude(int busIdx, double vmRef)
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case300_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu
+    }
 }

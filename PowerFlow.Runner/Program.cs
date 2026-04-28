@@ -20,15 +20,12 @@ else
 }
 
 var net = MatpowerParser.ParseFile(path);
-var result = new NewtonRaphsonSolver().Solve(net);
+var result = new NewtonRaphsonSolver { Log = new ConsoleLogger() }.Solve(net);
+Console.WriteLine();
 double mva = net.BaseMva;
 
 // Clamp values smaller than 0.01 MW/MVAr to zero to suppress floating-point noise in display.
 static double D(double v) => Math.Abs(v) < 1e-4 ? 0.0 : v;
-
-Console.WriteLine(
-    $"Converged: {result.Converged}  Iterations: {result.Iterations}  MaxMismatch: {result.MaxMismatch:e2} pu"
-);
 
 Console.WriteLine();
 Console.WriteLine(
@@ -44,14 +41,52 @@ for (int i = 0; i < net.Buses.Count; i++)
 
 Console.WriteLine();
 Console.WriteLine(
-    $"{"From", -4}  {"To", -4}  {"P_ij (MW)", 10}  {"Q_ij (MVAr)", 12}  {"P_ji (MW)", 10}  {"Q_ji (MVAr)", 12}  {"Loss (MW)", 10}"
+    $"{"From", -4}  {"To", -4}  {"P_ij (MW)", 10}  {"Q_ij (MVAr)", 12}  {"P_ji (MW)", 10}  {"Q_ji (MVAr)", 12}  {"Loss (MW)", 10}  {"Loading", 8}"
 );
 Console.WriteLine(
-    $"{"----", -4}  {"--", -4}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"------------", 12}  {"----------", 10}"
+    $"{"----", -4}  {"--", -4}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"------------", 12}  {"----------", 10}  {"--------", 8}"
 );
 foreach (var bf in result.BranchFlows)
+{
+    string loading = double.IsNaN(bf.LoadingPct) ? "      - " : $"{bf.LoadingPct, 7:F1}%";
     Console.WriteLine(
-        $"{bf.FromBusId, -4}  {bf.ToBusId, -4}  {D(bf.Pij * mva), 10:F2}  {D(bf.Qij * mva), 12:F2}  {D(bf.Pji * mva), 10:F2}  {D(bf.Qji * mva), 12:F2}  {D((bf.Pij + bf.Pji) * mva), 10:F2}"
+        $"{bf.FromBusId, -4}  {bf.ToBusId, -4}  {D(bf.Pij * mva), 10:F2}  {D(bf.Qij * mva), 12:F2}  {D(bf.Pji * mva), 10:F2}  {D(bf.Qji * mva), 12:F2}  {D((bf.Pij + bf.Pji) * mva), 10:F2}  {loading}"
     );
+}
+
+if (result.VoltageViolations.Count > 0)
+{
+    Console.WriteLine();
+    Console.WriteLine($"!!! Voltage violations ({result.VoltageViolations.Count}):");
+    foreach (var v in result.VoltageViolations)
+    {
+        string kind = v.IsOverVoltage ? "over " : "under";
+        Console.WriteLine(
+            $"   Bus {v.BusId, -4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}-{v.Vmax:F3} pu)"
+        );
+    }
+}
 
 return 0;
+
+// Minimal ILogger that writes directly to the console without any category/level prefix.
+// Warnings go to stderr so they stand out even when stdout is piped.
+sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
+{
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
+
+    public void Log<TState>(
+        Microsoft.Extensions.Logging.LogLevel level,
+        Microsoft.Extensions.Logging.EventId id,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        string msg = formatter(state, exception);
+        if (level >= Microsoft.Extensions.Logging.LogLevel.Warning)
+            Console.Error.WriteLine(msg);
+        else
+            Console.WriteLine(msg);
+    }
+}

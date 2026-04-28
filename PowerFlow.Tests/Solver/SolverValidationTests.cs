@@ -79,6 +79,19 @@ public class SolverValidationTests
             result.Vm[1] < 1.045, // voltage no longer held by PV constraint
             $"Expected bus 2 Vm < 1.045 after switch, got {result.Vm[1]:F4}"
         );
+        // Vm < Vg (1.045) after switch at Qmax → recovery condition (Vm > Vg) not met → stays PQ.
+        // This confirms the recovery guard does not fire when the limit is genuinely binding.
+    }
+
+    [Fact]
+    public void Solve_Case14_QLimitSwitch_RecoveryDoesNotOscillate()
+    {
+        // Solve repeatedly with EnforceLimits — the outer loop must terminate within
+        // MaxLimitIterations regardless of switch/recovery interplay.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var result = new NewtonRaphsonSolver { MaxLimitIterations = 10 }.Solve(net);
+
+        Assert.True(result.Converged);
     }
 
     [Fact]
@@ -132,5 +145,58 @@ public class SolverValidationTests
         var result = new NewtonRaphsonSolver().Solve(net);
 
         Assert.Equal(Case14Reference[busIdx].Va, result.Va[busIdx], 2); // +/-0.005 degrees
+    }
+
+    // ─── Branch loading ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_Case14_FlatStart_LoadingPct_UnconstrainedIsNaN()
+    {
+        // case14_flatstart.m has rateA=0 for all branches — loading % is undefined.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.All(result.BranchFlows, bf => Assert.True(double.IsNaN(bf.LoadingPct)));
+    }
+
+    [Fact]
+    public void Solve_Case30_LoadingPct_FirstBranch()
+    {
+        // Branch 1→2 in case30: rateA=130 MVA, baseMVA=100.
+        // From-end flow ≈ 10.89 MW, -5.09 MVAr → |S| ≈ 12.0 MVA → ~9.2 % loading.
+        var net = MatpowerParser.ParseFile(TestData.Path("case30.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        var bf = result.BranchFlows[0]; // branch 1→2
+        Assert.False(double.IsNaN(bf.LoadingPct));
+        Assert.Equal(9.2, bf.LoadingPct, 1); // ±0.05 %
+    }
+
+    // ─── Voltage violations ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_Case14_FlatStart_DetectsOvervoltageOnPVBuses()
+    {
+        // case14_flatstart.m has Vmax=1.06 for all buses.
+        // Generator setpoints for buses 6 (Vg=1.07) and 8 (Vg=1.09) exceed that limit;
+        // bus 7 (PQ, transformer-connected to bus 8) is pulled above 1.06 as well.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(3, result.VoltageViolations.Count);
+        Assert.All(result.VoltageViolations, v => Assert.True(v.IsOverVoltage));
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 6);
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 7);
+        Assert.Contains(result.VoltageViolations, v => v.BusId == 8);
+    }
+
+    [Fact]
+    public void Solve_Case30_NoVoltageViolations()
+    {
+        // case30.m uses Vmax=1.1 for PV buses; all generator setpoints are 1.0 pu — no violations.
+        var net = MatpowerParser.ParseFile(TestData.Path("case30.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Empty(result.VoltageViolations);
     }
 }
