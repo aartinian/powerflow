@@ -13,6 +13,12 @@ public class NewtonRaphsonSolver
     public int MaxIterations { get; init; } = 50;
     public bool EnforceLimits { get; init; } = true;
 
+    /// <summary>
+    /// Maximum outer iterations for the Q-limit enforcement loop (PV⇄PQ switching).
+    /// Caps the loop to prevent oscillation when limits are marginal.
+    /// </summary>
+    public int MaxLimitIterations { get; init; } = 10;
+
     public PowerFlowResult Solve(PowerNetwork network)
     {
         var ybus = YBusBuilder.Build(network);
@@ -90,6 +96,21 @@ public class NewtonRaphsonSolver
             }
         }
 
+        // Vg setpoints for originally-PV buses — needed to restore voltage on PQ→PV recovery.
+        // Multiple generators on the same bus should share the same setpoint; last writer wins.
+        var vgSetpoint = new double[n];
+        foreach (var gen in network.Generators.Where(g => g.IsInService))
+        {
+            int i = network.IndexOf(gen.BusId);
+            if (network.Buses[i].Type == BusType.PV)
+                vgSetpoint[i] = gen.Vg;
+        }
+
+        // Tracks buses that were switched PV→PQ and the reason:
+        //   true  = switched because Qg hit Qmax
+        //   false = switched because Qg hit Qmin
+        var switchedAtMax = new Dictionary<int, bool>();
+
         double[] P = new double[n];
         double[] Q = new double[n];
         double mismatch = double.MaxValue;
@@ -97,9 +118,11 @@ public class NewtonRaphsonSolver
         int iterations = MaxIterations;
 
         bool limitViolated;
+        int limitIter = 0;
         do
         {
             limitViolated = false;
+            limitIter++;
 
             // pvpq = all non-slack buses: PV first, then PQ (including any that were switched).
             // This ordering determines the row/column layout of the Jacobian.
@@ -156,8 +179,25 @@ public class NewtonRaphsonSolver
 
             if (EnforceLimits)
             {
-                // Check reactive limits at every bus still classified as PV.
-                // Qg (MVAr) = net reactive injection × baseMVA + load reactive.
+                // 1. PQ→PV recovery: a previously switched bus whose limit is no longer binding.
+                //    Qmax switch: limit not binding when Vm has risen above the setpoint.
+                //    Qmin switch: limit not binding when Vm has fallen below the setpoint.
+                foreach (int i in switchedAtMax.Keys.ToList())
+                {
+                    double vg = vgSetpoint[i];
+                    bool canRecover = switchedAtMax[i] ? Vm[i] > vg : Vm[i] < vg;
+                    if (canRecover)
+                    {
+                        pqList.Remove(i);
+                        pvList.Add(i);
+                        Vm[i] = vg; // restore regulated voltage
+                        switchedAtMax.Remove(i);
+                        limitViolated = true;
+                    }
+                }
+
+                // 2. PV→PQ switching: check reactive limits on still-PV buses.
+                //    Qg (MVAr) = net reactive injection × baseMVA + load reactive.
                 foreach (int i in pvList.ToList())
                 {
                     double qgMvar = Q[i] * network.BaseMva + network.Buses[i].Qd;
@@ -166,6 +206,7 @@ public class NewtonRaphsonSolver
                         Qsch[i] = (qMaxMvar[i] - network.Buses[i].Qd) / network.BaseMva;
                         pvList.Remove(i);
                         pqList.Add(i);
+                        switchedAtMax[i] = true;
                         limitViolated = true;
                     }
                     else if (qgMvar < qMinMvar[i])
@@ -173,11 +214,12 @@ public class NewtonRaphsonSolver
                         Qsch[i] = (qMinMvar[i] - network.Buses[i].Qd) / network.BaseMva;
                         pvList.Remove(i);
                         pqList.Add(i);
+                        switchedAtMax[i] = false;
                         limitViolated = true;
                     }
                 }
             }
-        } while (limitViolated);
+        } while (limitViolated && limitIter < MaxLimitIterations);
 
         // Net generation at each bus in pu: Pgen = net injection + load.
         // Zero for load-only buses (P[i] ≈ -Pd[i]/baseMVA → Pg[i] ≈ 0).

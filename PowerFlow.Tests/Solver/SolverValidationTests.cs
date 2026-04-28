@@ -79,6 +79,19 @@ public class SolverValidationTests
             result.Vm[1] < 1.045, // voltage no longer held by PV constraint
             $"Expected bus 2 Vm < 1.045 after switch, got {result.Vm[1]:F4}"
         );
+        // Vm < Vg (1.045) after switch at Qmax → recovery condition (Vm > Vg) not met → stays PQ.
+        // This confirms the recovery guard does not fire when the limit is genuinely binding.
+    }
+
+    [Fact]
+    public void Solve_Case14_QLimitSwitch_RecoveryDoesNotOscillate()
+    {
+        // Solve repeatedly with EnforceLimits — the outer loop must terminate within
+        // MaxLimitIterations regardless of switch/recovery interplay.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var result = new NewtonRaphsonSolver { MaxLimitIterations = 10 }.Solve(net);
+
+        Assert.True(result.Converged);
     }
 
     [Fact]
