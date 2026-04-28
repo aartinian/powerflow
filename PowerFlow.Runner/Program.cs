@@ -65,7 +65,7 @@ if (result.VoltageViolations.Count > 0)
     {
         string kind = v.IsOverVoltage ? "over " : "under";
         Console.WriteLine(
-            $"   Bus {v.BusId,-4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}–{v.Vmax:F3} pu)"
+            $"   Bus {v.BusId, -4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}-{v.Vmax:F3} pu)"
         );
     }
 }

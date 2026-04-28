@@ -4,7 +4,7 @@ namespace PowerFlow.Core.Solver;
 public class VoltageViolation
 {
     public int BusId { get; }
-    public double Vm { get; }   // pu — actual solved voltage magnitude
+    public double Vm { get; } // pu — actual solved voltage magnitude
     public double Vmin { get; } // pu — lower limit from bus data
     public double Vmax { get; } // pu — upper limit from bus data
 
