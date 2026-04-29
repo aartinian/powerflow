@@ -228,9 +228,9 @@
 
 .pf-section-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.75rem;
-    padding: 0.7rem 1rem;
+    padding: 0.6rem 1rem;
     border-bottom: 1px solid var(--pf-border);
     background: var(--pf-surface-2);
     transition: background 0.2s, border-color 0.2s;
@@ -471,12 +471,126 @@
 }
 @keyframes pf-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
+/* ── Icon button (section-head actions) ────────────────── */
+
+.pf-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: none;
+    border: 1px solid var(--pf-border);
+    border-radius: var(--pf-radius-sm);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--pf-text-3);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+    flex-shrink: 0;
+}
+.pf-icon-btn:hover { border-color: var(--pf-accent); color: var(--pf-accent); }
+
 /* ── Diagram ───────────────────────────────────────────── */
+
+.pf-diagram-wrap {
+    position: relative;
+}
 
 .pf-diagram {
     height: 520px;
     background: var(--pf-surface-2);
     transition: background 0.2s;
+}
+
+/* ── Node popover ──────────────────────────────────────── */
+
+.pf-node-popover {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 210px;
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
+    border-radius: var(--pf-radius);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+    z-index: 10;
+    overflow: hidden;
+    animation: pf-popover-in 0.12s ease;
+    transition: background 0.2s, border-color 0.2s;
+}
+@keyframes pf-popover-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.pf-npo-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--pf-border);
+    background: var(--pf-surface-2);
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.pf-npo-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--pf-text-1);
+    flex: 1;
+}
+
+.pf-npo-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--pf-text-4);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+}
+.pf-npo-close:hover { background: var(--pf-hover); color: var(--pf-text-2); }
+
+.pf-npo-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    row-gap: 0;
+    padding: 0.5rem 0.75rem 0.65rem;
+}
+
+.pf-npo-lbl {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--pf-text-4);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.22rem 0.6rem 0.22rem 0;
+    white-space: nowrap;
+}
+
+.pf-npo-val {
+    font-size: 0.82rem;
+    color: var(--pf-text-2);
+    font-variant-numeric: tabular-nums;
+    padding: 0.22rem 0;
+}
+
+.pf-npo-sep {
+    height: 0.4rem;
+    grid-column: span 1;
+}
+
+/* Isolated bus chip variant */
+.pf-bus-isolated {
+    background: var(--pf-surface-2);
+    color: var(--pf-text-4);
 }
 
 .pf-legend {

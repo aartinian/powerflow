@@ -272,12 +272,87 @@
                         <span class="pf-section-note">&thinsp;· random layout for large cases</span>
                     }
                 </span>
+                <button class="pf-icon-btn ms-auto" @onclick="ResetZoom" title="Reset zoom">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="15 3 21 3 21 9"/>
+                        <polyline points="9 21 3 21 3 15"/>
+                        <line x1="21" y1="3" x2="14" y2="10"/>
+                        <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                    Reset zoom
+                </button>
             </div>
             @if (_diagramError is not null)
             {
                 <div class="pf-banner pf-fail m-2 mt-0">@_diagramError</div>
             }
-            <div @ref="_diagramContainer" class="pf-diagram"></div>
+            <div class="pf-diagram-wrap">
+                <div @ref="_diagramContainer" class="pf-diagram"></div>
+                @if (_popover is { } p)
+                {
+                    <div class="pf-node-popover">
+                        <div class="pf-npo-head">
+                            <span class="pf-npo-title">Bus @p.BusId</span>
+                            <span class="pf-bus-chip pf-bus-@p.TypeCss">@p.TypeLabel</span>
+                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="pf-npo-grid">
+                            <span class="pf-npo-lbl">Vm</span>
+                            <span class="pf-npo-val @VmClass(p.Vm)">@p.Vm.ToString("F4") pu</span>
+                            <span class="pf-npo-lbl">Va</span>
+                            <span class="pf-npo-val">@p.Va.ToString("F3")°</span>
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">Pg</span>
+                            <span class="pf-npo-val">@Fmt(p.Pg) MW</span>
+                            <span class="pf-npo-lbl">Qg</span>
+                            <span class="pf-npo-val">@Fmt(p.Qg) MVAr</span>
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">Pd</span>
+                            <span class="pf-npo-val">@Fmt(p.Pd) MW</span>
+                            <span class="pf-npo-lbl">Qd</span>
+                            <span class="pf-npo-val">@Fmt(p.Qd) MVAr</span>
+                        </div>
+                    </div>
+                }
+                @if (_branchPopover is { } b)
+                {
+                    <div class="pf-node-popover">
+                        <div class="pf-npo-head">
+                            <span class="pf-npo-title">@b.FromBusId &thinsp;→&thinsp; @b.ToBusId</span>
+                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="pf-npo-grid">
+                            <span class="pf-npo-lbl">P_ij</span>
+                            <span class="pf-npo-val">@Fmt(b.Pij) MW</span>
+                            <span class="pf-npo-lbl">Q_ij</span>
+                            <span class="pf-npo-val">@Fmt(b.Qij) MVAr</span>
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">P_ji</span>
+                            <span class="pf-npo-val">@Fmt(b.Pji) MW</span>
+                            <span class="pf-npo-lbl">Q_ji</span>
+                            <span class="pf-npo-val">@Fmt(b.Qji) MVAr</span>
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">Loss</span>
+                            <span class="pf-npo-val">@Fmt(b.LossMW) MW</span>
+                            <span class="pf-npo-lbl">Loading</span>
+                            <span class="pf-npo-val @LoadClass(b.LoadingPct)">
+                                @(double.IsNaN(b.LoadingPct) ? "—" : b.LoadingPct.ToString("F1") + "%")
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
             <div class="pf-legend">
                 <span class="pf-legend-label">Buses</span>
                 <span class="pf-legend-item">
@@ -444,6 +519,18 @@
         double VmMin, double VmMax, double MaxLoadPct,
         int NSlack, int NPv, int NPq);
 
+    record PopoverBus(
+        int BusId, string TypeLabel, string TypeCss,
+        double Vm, double Va,
+        double Pg, double Qg,
+        double Pd, double Qd);
+
+    record PopoverBranch(
+        int FromBusId, int ToBusId,
+        double Pij, double Qij,
+        double Pji, double Qji,
+        double LossMW, double LoadingPct);
+
     static readonly CaseMeta[] Cases =
     [
         new("case14",  "IEEE 14",   14,  20,  5),
@@ -468,6 +555,9 @@
     IJSObjectReference? _diagramModule;
     bool _shouldRenderDiagram;
     string? _diagramError;
+    DotNetObjectReference<Home>? _dotNetRef;
+    PopoverBus? _popover;
+    PopoverBranch? _branchPopover;
 
     SolveMetrics? _metrics;
     SolveMetrics? Metrics => _metrics ??= BuildMetrics();
@@ -513,6 +603,8 @@
         error = null;
         result = null;
         _metrics = null;
+        _popover = null;
+        _branchPopover = null;
         logLines.Clear();
         logCollapsed = true;
         _diagramError = null;
@@ -561,6 +653,7 @@
             try
             {
                 _diagramModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./diagram.js");
+                _dotNetRef ??= DotNetObjectReference.Create(this);
                 var busData = network.Buses.Select((b, i) => new {
                     id = b.Id, vm = result.Vm[i], busType = (int)b.Type
                 }).ToArray();
@@ -569,7 +662,7 @@
                     toBusId   = bf.ToBusId,
                     loadingPct = double.IsNaN(bf.LoadingPct) ? (double?)null : bf.LoadingPct
                 }).ToArray();
-                await _diagramModule.InvokeVoidAsync("render", _diagramContainer, busData, branchData);
+                await _diagramModule.InvokeVoidAsync("render", _diagramContainer, busData, branchData, _dotNetRef);
             }
             catch (Exception ex)
             {
@@ -579,10 +672,74 @@
         }
     }
 
+    [JSInvokable]
+    public Task OnNodeTap(int busId)
+    {
+        if (network is null || result is null) return Task.CompletedTask;
+        var idx = network.IndexOf(busId);
+        if (idx < 0) return Task.CompletedTask;
+        var bus = network.Buses[idx];
+        _branchPopover = null;
+        _popover = new PopoverBus(
+            BusId:     busId,
+            TypeLabel: bus.Type.ToString(),
+            TypeCss:   bus.Type.ToString().ToLowerInvariant(),
+            Vm: result.Vm[idx],
+            Va: result.Va[idx],
+            Pg: result.Pg[idx] * network.BaseMva,
+            Qg: result.Qg[idx] * network.BaseMva,
+            Pd: bus.Pd,
+            Qd: bus.Qd);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnEdgeTap(int edgeIndex)
+    {
+        if (result is null || network is null) return Task.CompletedTask;
+        if (edgeIndex < 0 || edgeIndex >= result.BranchFlows.Count) return Task.CompletedTask;
+        var bf  = result.BranchFlows[edgeIndex];
+        var mva = network.BaseMva;
+        _popover = null;
+        _branchPopover = new PopoverBranch(
+            FromBusId:  bf.FromBusId,
+            ToBusId:    bf.ToBusId,
+            Pij:        bf.Pij * mva,
+            Qij:        bf.Qij * mva,
+            Pji:        bf.Pji * mva,
+            Qji:        bf.Qji * mva,
+            LossMW:     (bf.Pij + bf.Pji) * mva,
+            LoadingPct: bf.LoadingPct);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnBackgroundTap()
+    {
+        _popover = null;
+        _branchPopover = null;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    async Task ResetZoom()
+    {
+        if (_diagramModule is not null)
+            try { await _diagramModule.InvokeVoidAsync("resetZoom"); } catch { }
+    }
+
+    async Task ClosePopover()
+    {
+        _popover = null;
+        _branchPopover = null;
+        if (_diagramModule is not null)
+            try { await _diagramModule.InvokeVoidAsync("unselectAll"); } catch { }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_diagramModule is not null)
             await _diagramModule.DisposeAsync();
+        _dotNetRef?.Dispose();
     }
 
     static string Fmt(double v) => (Math.Abs(v) < 1e-4 ? 0.0 : v).ToString("F1");

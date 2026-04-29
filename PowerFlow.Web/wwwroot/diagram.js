@@ -1,4 +1,7 @@
 let cy = null;
+let _dotNetRef = null;
+let _selectedId = null;
+let _selectedEdgeIdx = null;
 
 function isDarkMode() {
     const attr = document.documentElement.getAttribute('data-theme');
@@ -7,8 +10,11 @@ function isDarkMode() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-export function render(container, buses, branches) {
+export function render(container, buses, branches, dotNetRef) {
     if (cy) { cy.destroy(); cy = null; }
+    _dotNetRef = dotNetRef;
+    _selectedId = null;
+    _selectedEdgeIdx = null;
 
     const dark = isDarkMode();
     const n = buses.length;
@@ -53,6 +59,14 @@ export function render(container, buses, branches) {
                 }
             },
             {
+                selector: 'node:selected',
+                style: {
+                    'border-width': 3,
+                    'border-color': '#2563eb',
+                    'border-opacity': 1
+                }
+            },
+            {
                 selector: 'edge',
                 style: {
                     width: 1.5,
@@ -60,13 +74,80 @@ export function render(container, buses, branches) {
                     'curve-style': 'bezier',
                     opacity: 0.7
                 }
+            },
+            {
+                selector: 'edge:selected',
+                style: {
+                    width: 3.5,
+                    opacity: 1,
+                    'line-color': '#2563eb'
+                }
             }
         ]
     });
+
+    // Node tap
+    cy.on('tap', 'node', (evt) => {
+        const node = evt.target;
+        const id = parseInt(node.id());
+        _selectedEdgeIdx = null;
+        if (id === _selectedId) {
+            _selectedId = null;
+            cy.elements().unselect();
+            _dotNetRef?.invokeMethodAsync('OnBackgroundTap');
+        } else {
+            _selectedId = id;
+            cy.elements().unselect();
+            node.select();
+            _dotNetRef?.invokeMethodAsync('OnNodeTap', id);
+        }
+    });
+
+    // Edge tap
+    cy.on('tap', 'edge', (evt) => {
+        const edge = evt.target;
+        const idx = parseInt(edge.id().substring(1)); // 'e3' → 3
+        _selectedId = null;
+        if (idx === _selectedEdgeIdx) {
+            _selectedEdgeIdx = null;
+            cy.elements().unselect();
+            _dotNetRef?.invokeMethodAsync('OnBackgroundTap');
+        } else {
+            _selectedEdgeIdx = idx;
+            cy.elements().unselect();
+            edge.select();
+            _dotNetRef?.invokeMethodAsync('OnEdgeTap', idx);
+        }
+    });
+
+    // Background tap
+    cy.on('tap', (evt) => {
+        if (evt.target === cy) {
+            _selectedId = null;
+            _selectedEdgeIdx = null;
+            cy.elements().unselect();
+            _dotNetRef?.invokeMethodAsync('OnBackgroundTap');
+        }
+    });
+}
+
+export function resetZoom() {
+    if (cy) cy.fit(null, 30);
+}
+
+export function unselectAll() {
+    if (cy) {
+        cy.elements().unselect();
+        _selectedId = null;
+        _selectedEdgeIdx = null;
+    }
 }
 
 export function destroy() {
     if (cy) { cy.destroy(); cy = null; }
+    _dotNetRef = null;
+    _selectedId = null;
+    _selectedEdgeIdx = null;
 }
 
 function vmColor(vm) {
