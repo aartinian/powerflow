@@ -1,61 +1,212 @@
+/* ── CSS tokens ────────────────────────────────────────── */
+
+:root {
+    /* Layout */
+    --pf-radius: 10px;
+    --pf-radius-sm: 7px;
+
+    /* Light colours */
+    --pf-bg:        #eef2f7;
+    --pf-surface:   #ffffff;
+    --pf-surface-2: #f8fafc;
+    --pf-border:    #e2e8f0;
+    --pf-border-2:  #cbd5e1;
+
+    --pf-text-1: #0f172a;
+    --pf-text-2: #334155;
+    --pf-text-3: #64748b;
+    --pf-text-4: #94a3b8;
+
+    --pf-topbar:        #0c1929;
+    --pf-topbar-border: rgba(255,255,255,0.06);
+
+    --pf-accent:       #2563eb;
+    --pf-accent-hover: #1d4ed8;
+
+    --pf-log-bg:     #111827;
+    --pf-log-text:   #9ca3af;
+    --pf-log-warn:   #f59e0b;
+    --pf-log-header: #1c2d3d;
+    --pf-log-accent: #1e3a5f;
+
+    --pf-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    --pf-hover:  rgba(37,99,235,0.04);
+
+    /* Status — ok */
+    --pf-ok-bg:      #f0fdf4;
+    --pf-ok-border:  #86efac;
+    --pf-ok-text:    #14532d;
+    --pf-ok-icon-bg: #dcfce7;
+    --pf-ok-icon:    #16a34a;
+    --pf-ok-meta:    #166534;
+
+    /* Status — fail */
+    --pf-fail-bg:      #fef2f2;
+    --pf-fail-border:  #fca5a5;
+    --pf-fail-text:    #7f1d1d;
+    --pf-fail-icon-bg: #fee2e2;
+    --pf-fail-icon:    #dc2626;
+
+    /* Status — warn */
+    --pf-warn-bg:     #fffbeb;
+    --pf-warn-border: #fcd34d;
+    --pf-warn-text:   #92400e;
+
+    /* Empty state */
+    --pf-empty-glyph-bg: #eff6ff;
+    --pf-empty-glyph:    #2563eb;
+}
+
+/* ── Dark mode (system preference) ────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --pf-bg:        #0d1625;
+        --pf-surface:   #162035;
+        --pf-surface-2: #0f1a2e;
+        --pf-border:    #1e3050;
+        --pf-border-2:  #2a4060;
+
+        --pf-text-1: #e2e8f0;
+        --pf-text-2: #b0bdc8;
+        --pf-text-3: #7a8fa6;
+        --pf-text-4: #4a6070;
+
+        --pf-topbar:        #080e18;
+        --pf-topbar-border: rgba(255,255,255,0.05);
+
+        --pf-accent:       #3b82f6;
+        --pf-accent-hover: #2563eb;
+
+        --pf-log-bg:     #080e18;
+        --pf-log-text:   #7a9ab5;
+        --pf-log-header: #0f1a2e;
+        --pf-log-accent: #2563eb;
+
+        --pf-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        --pf-hover:  rgba(255,255,255,0.03);
+
+        --pf-ok-bg:      #0a2a18;
+        --pf-ok-border:  #155e2b;
+        --pf-ok-text:    #4ade80;
+        --pf-ok-icon-bg: #052e16;
+        --pf-ok-icon:    #4ade80;
+        --pf-ok-meta:    #4ade80;
+
+        --pf-fail-bg:      #2a0a0a;
+        --pf-fail-border:  #7f1d1d;
+        --pf-fail-text:    #f87171;
+        --pf-fail-icon-bg: #450a0a;
+        --pf-fail-icon:    #f87171;
+
+        --pf-warn-bg:     #1a1200;
+        --pf-warn-border: #7c5c00;
+        --pf-warn-text:   #fcd34d;
+
+        --pf-empty-glyph-bg: #0f1a2e;
+        --pf-empty-glyph:    #3b82f6;
+    }
+}
+
+/* ── Dark mode (explicit toggle) ──────────────────────── */
+
+[data-theme="dark"] {
+    --pf-bg:        #0d1625;
+    --pf-surface:   #162035;
+    --pf-surface-2: #0f1a2e;
+    --pf-border:    #1e3050;
+    --pf-border-2:  #2a4060;
+
+    --pf-text-1: #e2e8f0;
+    --pf-text-2: #b0bdc8;
+    --pf-text-3: #7a8fa6;
+    --pf-text-4: #4a6070;
+
+    --pf-topbar:        #080e18;
+    --pf-topbar-border: rgba(255,255,255,0.05);
+
+    --pf-accent:       #3b82f6;
+    --pf-accent-hover: #2563eb;
+
+    --pf-log-bg:     #080e18;
+    --pf-log-text:   #7a9ab5;
+    --pf-log-header: #0f1a2e;
+    --pf-log-accent: #2563eb;
+
+    --pf-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    --pf-hover:  rgba(255,255,255,0.03);
+
+    --pf-ok-bg:      #0a2a18;
+    --pf-ok-border:  #155e2b;
+    --pf-ok-text:    #4ade80;
+    --pf-ok-icon-bg: #052e16;
+    --pf-ok-icon:    #4ade80;
+    --pf-ok-meta:    #4ade80;
+
+    --pf-fail-bg:      #2a0a0a;
+    --pf-fail-border:  #7f1d1d;
+    --pf-fail-text:    #f87171;
+    --pf-fail-icon-bg: #450a0a;
+    --pf-fail-icon:    #f87171;
+
+    --pf-warn-bg:     #1a1200;
+    --pf-warn-border: #7c5c00;
+    --pf-warn-text:   #fcd34d;
+
+    --pf-empty-glyph-bg: #0f1a2e;
+    --pf-empty-glyph:    #3b82f6;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    background-color: #f5f7fa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    background: var(--pf-bg);
+    color: var(--pf-text-1);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.2s, color 0.2s;
 }
 
-a, .btn-link {
-    color: #006bb7;
+a { color: var(--pf-accent); }
+a:hover { color: var(--pf-accent-hover); }
+h1:focus { outline: none; }
+
+/* ── Scrollbars ────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--pf-border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--pf-text-4); }
+
+.pf-log::-webkit-scrollbar-thumb { background: #30363d; }
+.pf-log::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+/* ── Theme toggle icon visibility ─────────────────────── */
+
+.pf-theme-toggle .icon-moon { display: none; }
+.pf-theme-toggle .icon-sun  { display: block; }
+
+/* Dark: show sun (to offer switching back to light) */
+[data-theme="dark"] .pf-theme-toggle .icon-moon { display: block; }
+[data-theme="dark"] .pf-theme-toggle .icon-sun  { display: none; }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pf-theme-toggle .icon-moon { display: block; }
+    :root:not([data-theme="light"]) .pf-theme-toggle .icon-sun  { display: none; }
 }
 
-.btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
-}
-
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
-.content {
-    padding-top: 1.1rem;
-}
-
-h1:focus {
-    outline: none;
-}
-
-.valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
-}
-
-.invalid {
-    outline: 1px solid #e50000;
-}
-
-.validation-message {
-    color: #e50000;
-}
+/* ── Blazor error ──────────────────────────────────────── */
 
 .blazor-error-boundary {
-    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    background: #b32121;
     padding: 1rem 1rem 1rem 3.7rem;
     color: white;
 }
-
-    .blazor-error-boundary::after {
-        content: "An error has occurred."
-    }
-
-.darker-border-checkbox.form-check-input {
-    border-color: #929292;
-}
-
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-    color: var(--bs-secondary-color);
-    text-align: end;
-}
-
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-    text-align: start;
-}
+.blazor-error-boundary::after { content: "An error has occurred."; }

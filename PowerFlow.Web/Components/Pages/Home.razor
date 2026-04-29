@@ -1,19 +1,51 @@
 @page "/"
 @rendermode InteractiveServer
 @using Microsoft.Extensions.Logging
+@implements IAsyncDisposable
 @inject IJSRuntime JS
 
 <PageTitle>PowerFlow — Solver</PageTitle>
 
-<div class="d-flex align-items-center gap-3 flex-wrap mb-4 pt-3">
-    <InputFile OnChange="HandleFile" accept=".m" class="form-control pf-file" />
-    <button class="pf-solve" @onclick="Solve" disabled="@(fileContent is null || busy)">
-        @(busy ? "Solving…" : "Solve")
+<!-- ── Toolbar ─────────────────────────────────────────── -->
+<div class="pf-toolbar">
+    <label class="pf-file-btn" title="Choose a MATPOWER .m file">
+        <InputFile OnChange="HandleFile" accept=".m" />
+        @if (fileName is null)
+        {
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Choose .m file</span>
+        }
+        else
+        {
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span class="pf-file-chosen">@fileName</span>
+        }
+    </label>
+
+    <button class="pf-solve" @onclick="Solve"
+            disabled="@(fileContent is null || busy)">
+        @if (busy)
+        {
+            <span class="pf-spinner" aria-hidden="true"></span>
+            <span>Solving…</span>
+        }
+        else
+        {
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Run solver</span>
+        }
     </button>
-    @if (fileName is not null)
-    {
-        <span class="text-muted small">@fileName</span>
-    }
 </div>
 
 @if (error is not null)
@@ -21,138 +53,316 @@
     <div class="pf-banner pf-fail mb-3">@error</div>
 }
 
+<!-- ── Idle state ──────────────────────────────────────── -->
+@if (!busy && logLines.Count == 0 && result is null)
+{
+    <div class="pf-empty">
+        <div class="pf-empty-inner">
+            <div class="pf-empty-glyph" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+            </div>
+            <h2 class="pf-empty-title">Ready to solve</h2>
+            <p class="pf-empty-sub">
+                Upload a MATPOWER <code>.m</code> case file above, then click <strong>Run solver</strong>.
+            </p>
+            <p class="pf-empty-hint">Validated on IEEE 14, 30, 57, 118, and 300-bus test cases.</p>
+        </div>
+    </div>
+}
+
+<!-- ── Workspace ───────────────────────────────────────── -->
 @if (busy || logLines.Count > 0 || result is not null)
 {
-    <div class="row g-3">
+    <!-- ── Solver log (top drawer) ────────────────────── -->
+    <div class="pf-log-panel pf-panel mb-3">
+        <div class="pf-log-header" @onclick="ToggleLog" role="button" tabindex="0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span class="pf-log-label">Solver Log</span>
+            <span class="pf-log-count">@logLines.Count lines</span>
+            @if (logCollapsed && logLines.Count > 0)
+            {
+                <span class="pf-log-preview">@logLines[^1].Text</span>
+            }
+            <svg class="pf-chevron @(logCollapsed ? "" : "pf-chevron-open")"
+                 width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"/>
+            </svg>
+        </div>
+        @if (!logCollapsed)
+        {
+            <div class="pf-log" @ref="logPanel">
+                @if (busy && logLines.Count == 0)
+                {
+                    <div class="pf-log-waiting">Waiting for solver…</div>
+                }
+                @foreach (var (text, isWarn) in logLines)
+                {
+                    <div class="@(isWarn ? "pf-warn" : "")">@text</div>
+                }
+            </div>
+        }
+    </div>
 
-        <div class="col-12 col-lg-4">
-            <div class="pf-panel">
-                <div class="pf-panel-title">Solver Log</div>
-                <div class="pf-log" @ref="logPanel">
-                    @foreach (var (text, isWarn) in logLines)
-                    {
-                        <div class="@(isWarn ? "pf-warn" : "")">@text</div>
-                    }
+    @if (busy && result is null)
+    {
+        <div class="pf-solving-placeholder mb-3">
+            <span class="pf-spinner pf-spinner-lg" aria-hidden="true"></span>
+            <span>Running Newton-Raphson…</span>
+        </div>
+    }
+
+    @if (result is not null && network is not null)
+    {
+        <!-- Status card -->
+        <div class="pf-status-card @(result.Converged ? "pf-status-ok" : "pf-status-fail") mb-3">
+            <div class="pf-status-icon">
+                @if (result.Converged)
+                {
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                }
+            </div>
+            <div class="pf-status-body">
+                <div class="pf-status-title">@(result.Converged ? "Converged" : "Did not converge")</div>
+                <div class="pf-status-meta">
+                    @(result.Iterations + 1) iterations
+                    &thinsp;·&thinsp;
+                    max mismatch @result.MaxMismatch.ToString("e2") pu
+                    &thinsp;·&thinsp;
+                    @network.Buses.Count buses &thinsp;/&thinsp; @result.BranchFlows.Count branches &thinsp;/&thinsp; @network.Generators.Count generators
                 </div>
             </div>
         </div>
 
-        <div class="col-12 col-lg-8 d-flex flex-column gap-3">
-            @if (result is not null && network is not null)
-            {
-                <div class="pf-banner @(result.Converged ? "pf-ok" : "pf-fail")">
-                    @if (result.Converged)
-                    {
-                        <text>Converged in @(result.Iterations + 1) iterations — max mismatch @result.MaxMismatch.ToString("e2") pu</text>
-                    }
-                    else
-                    {
-                        <text>Did not converge — max mismatch @result.MaxMismatch.ToString("e2") pu</text>
-                    }
+        @if (result.VoltageViolations.Count > 0)
+        {
+            <div class="pf-panel pf-violations mb-3">
+                <div class="pf-section-head pf-section-head-warn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span class="pf-section-title">Voltage Violations</span>
+                    <span class="pf-section-meta">@result.VoltageViolations.Count bus@(result.VoltageViolations.Count == 1 ? "" : "es") outside limits</span>
                 </div>
-
-                @if (result.VoltageViolations.Count > 0)
-                {
-                    <div class="pf-banner pf-warn-box">
-                        <strong>Voltage violations (@result.VoltageViolations.Count)</strong>
-                        <ul class="mb-0 mt-1">
+                <div class="pf-tbl-wrap" style="max-height:220px">
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>Bus</th>
+                            <th class="text-end">Voltage (pu)</th>
+                            <th>Type</th>
+                            <th>Allowed range</th>
+                        </tr></thead>
+                        <tbody>
                             @foreach (var v in result.VoltageViolations)
                             {
-                                <li>
-                                    Bus @v.BusId — @v.Vm.ToString("F4") pu
-                                    (@(v.IsOverVoltage ? "over" : "under")voltage,
-                                    limit @v.Vmin.ToString("F3")–@v.Vmax.ToString("F3") pu)
-                                </li>
+                                <tr>
+                                    <td>@v.BusId</td>
+                                    <td class="text-end pf-cell-warn">@v.Vm.ToString("F4")</td>
+                                    <td>
+                                        <span class="pf-vbadge @(v.IsOverVoltage ? "pf-vbadge-over" : "pf-vbadge-under")">
+                                            @(v.IsOverVoltage ? "Over" : "Under")
+                                        </span>
+                                    </td>
+                                    <td class="pf-cell-muted">@v.Vmin.ToString("F3") – @v.Vmax.ToString("F3") pu</td>
+                                </tr>
                             }
-                        </ul>
-                    </div>
-                }
-
-                <div class="pf-panel">
-                    <div class="pf-tabs">
-                        <button class="pf-tab @(tab == "buses" ? "active" : "")"
-                                @onclick='() => tab = "buses"'>
-                            Buses (@network.Buses.Count)
-                        </button>
-                        <button class="pf-tab @(tab == "branches" ? "active" : "")"
-                                @onclick='() => tab = "branches"'>
-                            Branches (@result.BranchFlows.Count)
-                        </button>
-                    </div>
-                    <div class="pf-tbl-wrap">
-                        @if (tab == "buses")
-                        {
-                            <table class="table table-sm pf-tbl mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Bus</th>
-                                        <th class="text-end">Vm (pu)</th>
-                                        <th class="text-end">Va (°)</th>
-                                        <th class="text-end">Pg (MW)</th>
-                                        <th class="text-end">Qg (MVAr)</th>
-                                        <th class="text-end">Pd (MW)</th>
-                                        <th class="text-end">Qd (MVAr)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @for (int i = 0; i < network.Buses.Count; i++)
-                                    {
-                                        var bus = network.Buses[i];
-                                        <tr>
-                                            <td>@bus.Id</td>
-                                            <td class="text-end">@result.Vm[i].ToString("F4")</td>
-                                            <td class="text-end">@result.Va[i].ToString("F3")</td>
-                                            <td class="text-end">@Fmt(result.Pg[i] * network.BaseMva)</td>
-                                            <td class="text-end">@Fmt(result.Qg[i] * network.BaseMva)</td>
-                                            <td class="text-end">@bus.Pd.ToString("F1")</td>
-                                            <td class="text-end">@bus.Qd.ToString("F1")</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
-                        else
-                        {
-                            <table class="table table-sm pf-tbl mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>From</th>
-                                        <th>To</th>
-                                        <th class="text-end">P_ij (MW)</th>
-                                        <th class="text-end">Q_ij (MVAr)</th>
-                                        <th class="text-end">P_ji (MW)</th>
-                                        <th class="text-end">Q_ji (MVAr)</th>
-                                        <th class="text-end">Loss (MW)</th>
-                                        <th class="text-end">Loading</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var bf in result.BranchFlows)
-                                    {
-                                        var mva = network.BaseMva;
-                                        <tr>
-                                            <td>@bf.FromBusId</td>
-                                            <td>@bf.ToBusId</td>
-                                            <td class="text-end">@Fmt(bf.Pij * mva)</td>
-                                            <td class="text-end">@Fmt(bf.Qij * mva)</td>
-                                            <td class="text-end">@Fmt(bf.Pji * mva)</td>
-                                            <td class="text-end">@Fmt(bf.Qji * mva)</td>
-                                            <td class="text-end">@Fmt((bf.Pij + bf.Pji) * mva)</td>
-                                            <td class="text-end">
-                                                @(double.IsNaN(bf.LoadingPct)
-                                                    ? "—"
-                                                    : bf.LoadingPct.ToString("F1") + "%")
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
-                    </div>
+                        </tbody>
+                    </table>
                 </div>
+            </div>
+        }
+
+        <!-- ── Network diagram (standalone) ──────────── -->
+        <div class="pf-panel mb-3">
+            <div class="pf-section-head">
+                <span class="pf-section-title">Network Diagram</span>
+                <span class="pf-section-meta">
+                    @network.Buses.Count buses &thinsp;·&thinsp; @result.BranchFlows.Count branches
+                    @if (network.Buses.Count > 100)
+                    {
+                        <span class="pf-section-note">&thinsp;· random layout for large cases</span>
+                    }
+                </span>
+            </div>
+            @if (_diagramError is not null)
+            {
+                <div class="pf-banner pf-fail m-2 mt-0">@_diagramError</div>
             }
+            <div @ref="_diagramContainer" class="pf-diagram"></div>
+            <div class="pf-legend">
+                <span class="pf-legend-label">Buses</span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-dot" style="background:#22c55e"></span>0.95–1.05 pu
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-dot" style="background:#f59e0b"></span>Over-voltage
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-dot" style="background:#ef4444"></span>Under-voltage
+                </span>
+                <span class="pf-legend-sep"></span>
+                <span class="pf-legend-label">Branches</span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#22c55e"></span>&lt;70%
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#f59e0b"></span>70–90%
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#ef4444"></span>≥90%
+                </span>
+            </div>
         </div>
-    </div>
+
+        <!-- ── Data tables ────────────────────────────── -->
+        <div class="pf-panel mb-3">
+            <div class="pf-tabs">
+                <button class="pf-tab @(tab == "buses" ? "active" : "")"
+                        @onclick='() => tab = "buses"'>
+                    Buses <span class="pf-tab-count">@network.Buses.Count</span>
+                </button>
+                <button class="pf-tab @(tab == "branches" ? "active" : "")"
+                        @onclick='() => tab = "branches"'>
+                    Branches <span class="pf-tab-count">@result.BranchFlows.Count</span>
+                </button>
+                <button class="pf-tab @(tab == "generators" ? "active" : "")"
+                        @onclick='() => tab = "generators"'>
+                    Generators <span class="pf-tab-count">@network.Generators.Count</span>
+                </button>
+            </div>
+
+            <div class="pf-tbl-wrap">
+                @if (tab == "buses")
+                {
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>Bus</th>
+                            <th class="text-end">Vm (pu)</th>
+                            <th class="text-end">Va (°)</th>
+                            <th class="text-end">Pg (MW)</th>
+                            <th class="text-end">Qg (MVAr)</th>
+                            <th class="text-end">Pd (MW)</th>
+                            <th class="text-end">Qd (MVAr)</th>
+                        </tr></thead>
+                        <tbody>
+                            @for (int i = 0; i < network.Buses.Count; i++)
+                            {
+                                var bus = network.Buses[i];
+                                var vm = result.Vm[i];
+                                <tr>
+                                    <td>@bus.Id</td>
+                                    <td class="text-end @VmClass(vm)">@vm.ToString("F4")</td>
+                                    <td class="text-end">@result.Va[i].ToString("F3")</td>
+                                    <td class="text-end">@Fmt(result.Pg[i] * network.BaseMva)</td>
+                                    <td class="text-end">@Fmt(result.Qg[i] * network.BaseMva)</td>
+                                    <td class="text-end">@bus.Pd.ToString("F1")</td>
+                                    <td class="text-end">@bus.Qd.ToString("F1")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else if (tab == "branches")
+                {
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>From</th>
+                            <th>To</th>
+                            <th class="text-end">P_ij (MW)</th>
+                            <th class="text-end">Q_ij (MVAr)</th>
+                            <th class="text-end">P_ji (MW)</th>
+                            <th class="text-end">Q_ji (MVAr)</th>
+                            <th class="text-end">Loss (MW)</th>
+                            <th class="text-end">Loading</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var bf in result.BranchFlows)
+                            {
+                                var mva = network.BaseMva;
+                                var pct = bf.LoadingPct;
+                                <tr>
+                                    <td>@bf.FromBusId</td>
+                                    <td>@bf.ToBusId</td>
+                                    <td class="text-end">@Fmt(bf.Pij * mva)</td>
+                                    <td class="text-end">@Fmt(bf.Qij * mva)</td>
+                                    <td class="text-end">@Fmt(bf.Pji * mva)</td>
+                                    <td class="text-end">@Fmt(bf.Qji * mva)</td>
+                                    <td class="text-end">@Fmt((bf.Pij + bf.Pji) * mva)</td>
+                                    <td class="text-end @LoadClass(pct)">
+                                        @(double.IsNaN(pct) ? "—" : pct.ToString("F1") + "%")
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>#</th>
+                            <th>Bus</th>
+                            <th class="text-end">Vg (pu)</th>
+                            <th class="text-end">Pg (MW)</th>
+                            <th class="text-end">Pg_min</th>
+                            <th class="text-end">Pg_max</th>
+                            <th class="text-end">Qg (MVAr)</th>
+                            <th class="text-end">Qg_min</th>
+                            <th class="text-end">Qg_max</th>
+                            <th>Status</th>
+                        </tr></thead>
+                        <tbody>
+                            @for (int i = 0; i < network.Generators.Count; i++)
+                            {
+                                var gen = network.Generators[i];
+                                var busIdx = network.IndexOf(gen.BusId);
+                                <tr>
+                                    <td class="pf-cell-muted">@(i + 1)</td>
+                                    <td>@gen.BusId</td>
+                                    <td class="text-end">@gen.Vg.ToString("F4")</td>
+                                    <td class="text-end">@Fmt(gen.Pg)</td>
+                                    <td class="text-end pf-cell-muted">@Fmt(gen.Pmin)</td>
+                                    <td class="text-end pf-cell-muted">@Fmt(gen.Pmax)</td>
+                                    <td class="text-end">@Fmt(result.Qg[busIdx] * network.BaseMva)</td>
+                                    <td class="text-end pf-cell-muted">@Fmt(gen.Qmin)</td>
+                                    <td class="text-end pf-cell-muted">@Fmt(gen.Qmax)</td>
+                                    <td>
+                                        @if (gen.IsInService)
+                                        {
+                                            <span class="pf-badge pf-badge-ok">On</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="pf-badge pf-badge-off">Off</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
 }
 
 @code {
@@ -161,17 +371,23 @@
     bool busy;
     string? error;
     string tab = "buses";
+    bool logCollapsed;
     PowerNetwork? network;
     PowerFlowResult? result;
     List<(string Text, bool IsWarn)> logLines = [];
     ElementReference logPanel;
     bool shouldScroll;
+    ElementReference _diagramContainer;
+    IJSObjectReference? _diagramModule;
+    bool _shouldRenderDiagram;
+    string? _diagramError;
 
     async Task HandleFile(InputFileChangeEventArgs e)
     {
         fileName = e.File.Name;
         result = null;
         error = null;
+        logLines.Clear();
         using var reader = new StreamReader(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
         fileContent = await reader.ReadToEndAsync();
     }
@@ -183,6 +399,8 @@
         error = null;
         result = null;
         logLines.Clear();
+        logCollapsed = false;
+        _diagramError = null;
 
         var logger = new SolverLogger(async (text, isWarn) =>
         {
@@ -200,6 +418,7 @@
             var res = await Task.Run(() => new NewtonRaphsonSolver { Log = logger }.Solve(net));
             network = net;
             result = res;
+            _shouldRenderDiagram = true;
         }
         catch (Exception ex)
         {
@@ -211,16 +430,48 @@
         }
     }
 
+    void ToggleLog() => logCollapsed = !logCollapsed;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (shouldScroll)
+        if (shouldScroll && !logCollapsed)
         {
             shouldScroll = false;
             await JS.InvokeVoidAsync("scrollToBottom", logPanel);
         }
+        if (_shouldRenderDiagram && result is not null && network is not null)
+        {
+            _shouldRenderDiagram = false;
+            try
+            {
+                _diagramModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./diagram.js");
+                var busData = network.Buses.Select((b, i) => new {
+                    id = b.Id, vm = result.Vm[i], busType = (int)b.Type
+                }).ToArray();
+                var branchData = result.BranchFlows.Select(bf => new {
+                    fromBusId = bf.FromBusId,
+                    toBusId   = bf.ToBusId,
+                    loadingPct = double.IsNaN(bf.LoadingPct) ? (double?)null : bf.LoadingPct
+                }).ToArray();
+                await _diagramModule.InvokeVoidAsync("render", _diagramContainer, busData, branchData);
+            }
+            catch (Exception ex)
+            {
+                _diagramError = ex.Message;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_diagramModule is not null)
+            await _diagramModule.DisposeAsync();
     }
 
     static string Fmt(double v) => (Math.Abs(v) < 1e-4 ? 0.0 : v).ToString("F1");
+    static string VmClass(double vm) => vm < 0.95 || vm > 1.05 ? "pf-cell-warn" : "";
+    static string LoadClass(double pct) => double.IsNaN(pct) ? "" : pct >= 90 ? "pf-cell-danger" : pct >= 70 ? "pf-cell-warn" : "";
 
     sealed class SolverLogger(Func<string, bool, Task> emit) : ILogger
     {
