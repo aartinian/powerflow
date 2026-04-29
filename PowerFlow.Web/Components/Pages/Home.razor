@@ -9,6 +9,24 @@
 
 <!-- ── Toolbar ─────────────────────────────────────────── -->
 <div class="pf-toolbar">
+    <!-- Sample cases (left) -->
+    <div class="pf-toolbar-samples">
+        <span class="pf-samples-label">Sample</span>
+        @foreach (var c in Cases)
+        {
+            <button class="pf-sample-btn @(fileName == c.File + ".m" ? "active" : "")"
+                    @onclick="() => LoadSample(c.File)"
+                    disabled="@busy"
+                    title="@c.Buses buses · @c.Branches branches · @c.Gens generators">
+                @c.Label
+                <span class="pf-sample-meta">@c.Buses bus</span>
+            </button>
+        }
+    </div>
+
+    <div class="pf-toolbar-sep" aria-hidden="true"></div>
+
+    <!-- File + Solve (right) -->
     <label class="pf-file-btn" title="Choose a MATPOWER .m file">
         <InputFile OnChange="HandleFile" accept=".m" />
         @if (fileName is null)
@@ -47,21 +65,6 @@
             <span>Run solver</span>
         }
     </button>
-</div>
-
-<!-- ── Sample cases ────────────────────────────────────── -->
-<div class="pf-samples">
-    <span class="pf-samples-label">Sample</span>
-    @foreach (var c in Cases)
-    {
-        <button class="pf-sample-btn @(fileName == c.File + ".m" ? "active" : "")"
-                @onclick="() => LoadSample(c.File)"
-                disabled="@busy"
-                title="@c.Buses buses · @c.Branches branches · @c.Gens generators">
-            @c.Label
-            <span class="pf-sample-meta">@c.Buses bus</span>
-        </button>
-    }
 </div>
 
 @if (error is not null)
@@ -202,6 +205,58 @@
                             }
                         </tbody>
                     </table>
+                </div>
+            </div>
+        }
+
+        <!-- ── Summary metrics ────────────────────────── -->
+        @if (Metrics is { } m)
+        {
+            <div class="pf-metrics pf-panel mb-3">
+                <div class="pf-metric">
+                    <div class="pf-metric-row">
+                        <span class="pf-metric-num">@Fmt(m.GenMW)</span>
+                        <span class="pf-metric-unit">MW</span>
+                    </div>
+                    <div class="pf-metric-lbl">Generation</div>
+                </div>
+                <div class="pf-metric">
+                    <div class="pf-metric-row">
+                        <span class="pf-metric-num">@Fmt(m.LoadMW)</span>
+                        <span class="pf-metric-unit">MW</span>
+                    </div>
+                    <div class="pf-metric-lbl">Load</div>
+                </div>
+                <div class="pf-metric">
+                    <div class="pf-metric-row">
+                        <span class="pf-metric-num">@Fmt(m.LossMW)</span>
+                        <span class="pf-metric-unit">MW</span>
+                    </div>
+                    <div class="pf-metric-lbl">Losses</div>
+                </div>
+                <div class="pf-metric @VoltageRangeClass(m.VmMin, m.VmMax)">
+                    <div class="pf-metric-row">
+                        <span class="pf-metric-num pf-metric-num-sm">
+                            @m.VmMin.ToString("F3")&thinsp;–&thinsp;@m.VmMax.ToString("F3")
+                        </span>
+                        <span class="pf-metric-unit">pu</span>
+                    </div>
+                    <div class="pf-metric-lbl">Voltage range</div>
+                </div>
+                <div class="pf-metric @MaxLoadClass(m.MaxLoadPct)">
+                    <div class="pf-metric-row">
+                        <span class="pf-metric-num">@(double.IsNaN(m.MaxLoadPct) ? "—" : m.MaxLoadPct.ToString("F1"))</span>
+                        <span class="pf-metric-unit">@(double.IsNaN(m.MaxLoadPct) ? "" : "%")</span>
+                    </div>
+                    <div class="pf-metric-lbl">Max loading</div>
+                </div>
+                <div class="pf-metric">
+                    <div class="pf-metric-buses">
+                        <span class="pf-bus-chip pf-bus-slack">@m.NSlack&thinsp;Sl</span>
+                        <span class="pf-bus-chip pf-bus-pv">@m.NPv&thinsp;PV</span>
+                        <span class="pf-bus-chip pf-bus-pq">@m.NPq&thinsp;PQ</span>
+                    </div>
+                    <div class="pf-metric-lbl">Buses</div>
                 </div>
             </div>
         }
@@ -384,6 +439,11 @@
 @code {
     record CaseMeta(string File, string Label, int Buses, int Branches, int Gens);
 
+    record SolveMetrics(
+        double GenMW, double LoadMW, double LossMW,
+        double VmMin, double VmMax, double MaxLoadPct,
+        int NSlack, int NPv, int NPq);
+
     static readonly CaseMeta[] Cases =
     [
         new("case14",  "IEEE 14",   14,  20,  5),
@@ -398,7 +458,7 @@
     bool busy;
     string? error;
     string tab = "buses";
-    bool logCollapsed;
+    bool logCollapsed = true;
     PowerNetwork? network;
     PowerFlowResult? result;
     List<(string Text, bool IsWarn)> logLines = [];
@@ -408,6 +468,25 @@
     IJSObjectReference? _diagramModule;
     bool _shouldRenderDiagram;
     string? _diagramError;
+
+    SolveMetrics? _metrics;
+    SolveMetrics? Metrics => _metrics ??= BuildMetrics();
+
+    SolveMetrics? BuildMetrics()
+    {
+        if (result is null || network is null) return null;
+        var ps = result.BranchFlows.Select(bf => bf.LoadingPct).Where(p => !double.IsNaN(p)).ToList();
+        return new SolveMetrics(
+            GenMW:      result.Pg.Sum() * network.BaseMva,
+            LoadMW:     network.Buses.Sum(b => b.Pd),
+            LossMW:     result.BranchFlows.Sum(bf => bf.Pij + bf.Pji) * network.BaseMva,
+            VmMin:      result.Vm.Min(),
+            VmMax:      result.Vm.Max(),
+            MaxLoadPct: ps.Count > 0 ? ps.Max() : double.NaN,
+            NSlack:     network.Buses.Count(b => b.Type == BusType.Slack),
+            NPv:        network.Buses.Count(b => b.Type == BusType.PV),
+            NPq:        network.Buses.Count(b => b.Type == BusType.PQ));
+    }
 
     async Task LoadSample(string caseFile)
     {
@@ -433,8 +512,9 @@
         busy = true;
         error = null;
         result = null;
+        _metrics = null;
         logLines.Clear();
-        logCollapsed = false;
+        logCollapsed = true;
         _diagramError = null;
 
         var logger = new SolverLogger(async (text, isWarn) =>
@@ -454,6 +534,7 @@
             network = net;
             result = res;
             _shouldRenderDiagram = true;
+            _metrics = null; // invalidate lazy cache so Metrics recomputes from new result/network
         }
         catch (Exception ex)
         {
@@ -507,6 +588,10 @@
     static string Fmt(double v) => (Math.Abs(v) < 1e-4 ? 0.0 : v).ToString("F1");
     static string VmClass(double vm) => vm < 0.95 || vm > 1.05 ? "pf-cell-warn" : "";
     static string LoadClass(double pct) => double.IsNaN(pct) ? "" : pct >= 90 ? "pf-cell-danger" : pct >= 70 ? "pf-cell-warn" : "";
+    static string VoltageRangeClass(double vmMin, double vmMax) =>
+        vmMin < 0.95 ? "pf-metric-danger" : vmMax > 1.05 ? "pf-metric-warn" : "";
+    static string MaxLoadClass(double pct) =>
+        double.IsNaN(pct) ? "" : pct >= 90 ? "pf-metric-danger" : pct >= 70 ? "pf-metric-warn" : "";
 
     sealed class SolverLogger(Func<string, bool, Task> emit) : ILogger
     {
