@@ -3,6 +3,7 @@
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject IWebHostEnvironment Env
 
 <PageTitle>PowerFlow — Solver</PageTitle>
 
@@ -46,6 +47,21 @@
             <span>Run solver</span>
         }
     </button>
+</div>
+
+<!-- ── Sample cases ────────────────────────────────────── -->
+<div class="pf-samples">
+    <span class="pf-samples-label">Sample</span>
+    @foreach (var c in Cases)
+    {
+        <button class="pf-sample-btn @(fileName == c.File + ".m" ? "active" : "")"
+                @onclick="() => LoadSample(c.File)"
+                disabled="@busy"
+                title="@c.Buses buses · @c.Branches branches · @c.Gens generators">
+            @c.Label
+            <span class="pf-sample-meta">@c.Buses bus</span>
+        </button>
+    }
 </div>
 
 @if (error is not null)
@@ -366,6 +382,17 @@
 }
 
 @code {
+    record CaseMeta(string File, string Label, int Buses, int Branches, int Gens);
+
+    static readonly CaseMeta[] Cases =
+    [
+        new("case14",  "IEEE 14",   14,  20,  5),
+        new("case30",  "IEEE 30",   30,  41,  6),
+        new("case57",  "IEEE 57",   57,  80,  7),
+        new("case118", "IEEE 118", 118, 186, 54),
+        new("case300", "IEEE 300", 300, 411, 69),
+    ];
+
     string? fileName;
     string? fileContent;
     bool busy;
@@ -381,6 +408,14 @@
     IJSObjectReference? _diagramModule;
     bool _shouldRenderDiagram;
     string? _diagramError;
+
+    async Task LoadSample(string caseFile)
+    {
+        var path = Path.Combine(Env.WebRootPath, "cases", caseFile + ".m");
+        fileContent = await File.ReadAllTextAsync(path);
+        fileName = caseFile + ".m";
+        await Solve();
+    }
 
     async Task HandleFile(InputFileChangeEventArgs e)
     {

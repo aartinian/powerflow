@@ -45,6 +45,65 @@
     white-space: nowrap;
 }
 
+/* ── Sample cases ──────────────────────────────────────── */
+
+.pf-samples {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.pf-samples-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pf-text-4);
+    margin-right: 0.25rem;
+    white-space: nowrap;
+}
+
+.pf-sample-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
+    border-radius: 20px;
+    padding: 0.28rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--pf-text-2);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+    white-space: nowrap;
+}
+
+.pf-sample-btn:hover:not(:disabled) {
+    border-color: var(--pf-accent);
+    color: var(--pf-accent);
+    background: color-mix(in srgb, var(--pf-accent) 7%, transparent);
+}
+
+.pf-sample-btn.active {
+    border-color: var(--pf-accent);
+    color: var(--pf-accent);
+    background: color-mix(in srgb, var(--pf-accent) 10%, transparent);
+    font-weight: 600;
+}
+
+.pf-sample-btn:disabled { opacity: 0.45; cursor: default; }
+
+.pf-sample-meta {
+    font-size: 0.68rem;
+    color: var(--pf-text-4);
+    font-weight: 400;
+}
+
+.pf-sample-btn.active .pf-sample-meta { color: var(--pf-accent); opacity: 0.7; }
+
 /* ── Solve button ──────────────────────────────────────── */
 
 .pf-solve {
