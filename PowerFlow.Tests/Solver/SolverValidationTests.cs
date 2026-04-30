@@ -201,6 +201,31 @@ public class SolverValidationTests
         Assert.Empty(result.VoltageViolations);
     }
 
+    // ─── FlatStart option ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_FlatStartOption_MatchesFlatStartCaseFile()
+    {
+        // case14.m has bus Vm/Va near the solution; case14_flatstart.m has the same
+        // network with Vm=1, Va=0 baked in. Solving case14.m with FlatStart=true must
+        // produce results bit-equivalent to solving case14_flatstart.m.
+        var nearSolution = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var flatStartFile = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
+
+        var resultFromOption = new NewtonRaphsonSolver { FlatStart = true }.Solve(nearSolution);
+        var resultFromFile   = new NewtonRaphsonSolver().Solve(flatStartFile);
+
+        Assert.True(resultFromOption.Converged && resultFromFile.Converged);
+        Assert.Equal(resultFromFile.Iterations, resultFromOption.Iterations);
+        for (int i = 0; i < resultFromFile.Vm.Length; i++)
+        {
+            Assert.Equal(resultFromFile.Vm[i], resultFromOption.Vm[i], 12);
+            Assert.Equal(resultFromFile.Va[i], resultFromOption.Va[i], 12);
+            Assert.Equal(resultFromFile.Pg[i], resultFromOption.Pg[i], 12);
+            Assert.Equal(resultFromFile.Qg[i], resultFromOption.Qg[i], 12);
+        }
+    }
+
     // ─── Out-of-service branches ─────────────────────────────────────────────
 
     [Fact]

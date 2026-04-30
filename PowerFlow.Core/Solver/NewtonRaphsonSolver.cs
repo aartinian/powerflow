@@ -21,6 +21,16 @@ public class NewtonRaphsonSolver
     public int MaxLimitIterations { get; init; } = 10;
 
     /// <summary>
+    /// When true, the initial voltage state is overridden to a flat profile
+    /// (Vm = 1.0 pu, Va = 0°) regardless of what the bus data specifies.
+    /// Generator Vg setpoints are still applied at PV and slack buses, so the
+    /// resulting state matches what a hand-edited "flat-start" case file would
+    /// produce. Useful for cold-starting from an arbitrary case file without
+    /// having to maintain a separate flat-start variant.
+    /// </summary>
+    public bool FlatStart { get; init; } = false;
+
+    /// <summary>
     /// When non-null, solver progress is written here — one line per NR iteration,
     /// per Q-limit switch event, and a final convergence summary.
     /// Pass any <see cref="ILogger"/> instance; wire up via DI or
@@ -42,7 +52,7 @@ public class NewtonRaphsonSolver
             throw new InvalidOperationException("Network has no slack bus.");
 
         var (Psch, Qsch) = BuildScheduledInjections(network);
-        var (Vm, Va) = BuildInitialState(network);
+        var (Vm, Va) = BuildInitialState(network, FlatStart);
         var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
 
         // Tracks buses that were switched PV→PQ and the reason:
@@ -300,13 +310,30 @@ public class NewtonRaphsonSolver
     }
 
     /// <summary>
-    /// Initial voltage state from bus data, with generator Vg setpoints applied
-    /// at PV and slack buses. Va is converted from degrees to radians.
+    /// Initial voltage state. With <paramref name="flatStart"/> = false (default),
+    /// Vm/Va come from the bus data; with flatStart = true, all buses are
+    /// initialised to Vm = 1.0 pu and Va = 0. Either way, generator Vg
+    /// setpoints are applied at PV and slack buses afterwards. Va is returned
+    /// in radians.
     /// </summary>
-    private static (double[] Vm, double[] Va) BuildInitialState(PowerNetwork network)
+    private static (double[] Vm, double[] Va) BuildInitialState(
+        PowerNetwork network,
+        bool flatStart
+    )
     {
-        var Vm = network.Buses.Select(b => b.Vm).ToArray();
-        var Va = network.Buses.Select(b => b.Va * Math.PI / 180.0).ToArray();
+        int n = network.Buses.Count;
+        double[] Vm;
+        double[] Va;
+        if (flatStart)
+        {
+            Vm = Enumerable.Repeat(1.0, n).ToArray();
+            Va = new double[n];
+        }
+        else
+        {
+            Vm = network.Buses.Select(b => b.Vm).ToArray();
+            Va = network.Buses.Select(b => b.Va * Math.PI / 180.0).ToArray();
+        }
 
         foreach (var gen in network.Generators.Where(g => g.IsInService))
         {
