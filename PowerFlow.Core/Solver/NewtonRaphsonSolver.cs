@@ -37,87 +37,13 @@ public class NewtonRaphsonSolver
         var ybus = YBusBuilder.Build(network);
         int n = ybus.N;
 
-        int slackIdx = -1;
-        var pvList = new List<int>();
-        var pqList = new List<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            switch (network.Buses[i].Type)
-            {
-                case BusType.Slack:
-                    slackIdx = i;
-                    break;
-                case BusType.PV:
-                    pvList.Add(i);
-                    break;
-                case BusType.PQ:
-                    pqList.Add(i);
-                    break;
-            }
-        }
-
+        var (slackIdx, pvList, pqList) = ClassifyBuses(network);
         if (slackIdx < 0)
             throw new InvalidOperationException("Network has no slack bus.");
 
-        // Scheduled net injection in pu: sum of generator outputs minus load at each bus.
-        var Psch = new double[n];
-        var Qsch = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            Psch[i] = -network.Buses[i].Pd / network.BaseMva;
-            Qsch[i] = -network.Buses[i].Qd / network.BaseMva;
-        }
-        foreach (var gen in network.Generators.Where(g => g.IsInService))
-        {
-            int i = network.IndexOf(gen.BusId);
-            Psch[i] += gen.Pg / network.BaseMva;
-            Qsch[i] += gen.Qg / network.BaseMva;
-        }
-
-        // Initial voltage state from bus data.
-        // Va stored in radians internally; Vm stays in pu.
-        var Vm = network.Buses.Select(b => b.Vm).ToArray();
-        var Va = network.Buses.Select(b => b.Va * Math.PI / 180.0).ToArray();
-
-        // Enforce generator voltage setpoints at PV and slack buses.
-        foreach (var gen in network.Generators.Where(g => g.IsInService))
-        {
-            int i = network.IndexOf(gen.BusId);
-            if (network.Buses[i].Type is BusType.PV or BusType.Slack)
-                Vm[i] = gen.Vg;
-        }
-
-        // Per-bus Q limits (MVAr) for PV buses; summed when multiple generators share a bus.
-        // Buses without limits keep ±∞ so the comparison never fires.
-        var qMaxMvar = Enumerable.Repeat(double.PositiveInfinity, n).ToArray();
-        var qMinMvar = Enumerable.Repeat(double.NegativeInfinity, n).ToArray();
-        if (EnforceLimits)
-        {
-            foreach (var gen in network.Generators.Where(g => g.IsInService))
-            {
-                int i = network.IndexOf(gen.BusId);
-                if (network.Buses[i].Type == BusType.PV)
-                {
-                    qMaxMvar[i] = double.IsPositiveInfinity(qMaxMvar[i])
-                        ? gen.Qmax
-                        : qMaxMvar[i] + gen.Qmax;
-                    qMinMvar[i] = double.IsNegativeInfinity(qMinMvar[i])
-                        ? gen.Qmin
-                        : qMinMvar[i] + gen.Qmin;
-                }
-            }
-        }
-
-        // Vg setpoints for originally-PV buses — needed to restore voltage on PQ→PV recovery.
-        // Multiple generators on the same bus should share the same setpoint; last writer wins.
-        var vgSetpoint = new double[n];
-        foreach (var gen in network.Generators.Where(g => g.IsInService))
-        {
-            int i = network.IndexOf(gen.BusId);
-            if (network.Buses[i].Type == BusType.PV)
-                vgSetpoint[i] = gen.Vg;
-        }
+        var (Psch, Qsch) = BuildScheduledInjections(network);
+        var (Vm, Va) = BuildInitialState(network);
+        var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
 
         // Tracks buses that were switched PV→PQ and the reason:
         //   true  = switched because Qg hit Qmax
@@ -315,6 +241,123 @@ public class NewtonRaphsonSolver
 
         return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg);
     }
+
+    // ── Setup helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Splits buses into slack / PV / PQ index lists. Returns slackIdx = -1 when
+    /// no slack bus is present (caller is expected to throw).
+    /// </summary>
+    private static (int slackIdx, List<int> pvList, List<int> pqList) ClassifyBuses(
+        PowerNetwork network
+    )
+    {
+        int slackIdx = -1;
+        var pvList = new List<int>();
+        var pqList = new List<int>();
+
+        for (int i = 0; i < network.Buses.Count; i++)
+        {
+            switch (network.Buses[i].Type)
+            {
+                case BusType.Slack:
+                    slackIdx = i;
+                    break;
+                case BusType.PV:
+                    pvList.Add(i);
+                    break;
+                case BusType.PQ:
+                    pqList.Add(i);
+                    break;
+            }
+        }
+
+        return (slackIdx, pvList, pqList);
+    }
+
+    /// <summary>
+    /// Scheduled net injection in pu at every bus: Σ generator dispatch − load.
+    /// </summary>
+    private static (double[] Psch, double[] Qsch) BuildScheduledInjections(PowerNetwork network)
+    {
+        int n = network.Buses.Count;
+        var Psch = new double[n];
+        var Qsch = new double[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            Psch[i] = -network.Buses[i].Pd / network.BaseMva;
+            Qsch[i] = -network.Buses[i].Qd / network.BaseMva;
+        }
+        foreach (var gen in network.Generators.Where(g => g.IsInService))
+        {
+            int i = network.IndexOf(gen.BusId);
+            Psch[i] += gen.Pg / network.BaseMva;
+            Qsch[i] += gen.Qg / network.BaseMva;
+        }
+
+        return (Psch, Qsch);
+    }
+
+    /// <summary>
+    /// Initial voltage state from bus data, with generator Vg setpoints applied
+    /// at PV and slack buses. Va is converted from degrees to radians.
+    /// </summary>
+    private static (double[] Vm, double[] Va) BuildInitialState(PowerNetwork network)
+    {
+        var Vm = network.Buses.Select(b => b.Vm).ToArray();
+        var Va = network.Buses.Select(b => b.Va * Math.PI / 180.0).ToArray();
+
+        foreach (var gen in network.Generators.Where(g => g.IsInService))
+        {
+            int i = network.IndexOf(gen.BusId);
+            if (network.Buses[i].Type is BusType.PV or BusType.Slack)
+                Vm[i] = gen.Vg;
+        }
+
+        return (Vm, Va);
+    }
+
+    /// <summary>
+    /// Per-bus Q-limits (MVAr) and Vg setpoints for PV buses. Multiple generators
+    /// on the same bus contribute additively to the limits; the last gen's Vg wins.
+    /// Buses without PV-bus generators keep ±∞ for limits and 0 for setpoint.
+    /// When <paramref name="enforceLimits"/> is false the limit arrays stay at ±∞.
+    /// </summary>
+    private static (
+        double[] qMaxMvar,
+        double[] qMinMvar,
+        double[] vgSetpoint
+    ) BuildPvLimitsAndSetpoints(PowerNetwork network, bool enforceLimits)
+    {
+        int n = network.Buses.Count;
+        var qMaxMvar = Enumerable.Repeat(double.PositiveInfinity, n).ToArray();
+        var qMinMvar = Enumerable.Repeat(double.NegativeInfinity, n).ToArray();
+        var vgSetpoint = new double[n];
+
+        foreach (var gen in network.Generators.Where(g => g.IsInService))
+        {
+            int i = network.IndexOf(gen.BusId);
+            if (network.Buses[i].Type != BusType.PV)
+                continue;
+
+            if (enforceLimits)
+            {
+                qMaxMvar[i] = double.IsPositiveInfinity(qMaxMvar[i])
+                    ? gen.Qmax
+                    : qMaxMvar[i] + gen.Qmax;
+                qMinMvar[i] = double.IsNegativeInfinity(qMinMvar[i])
+                    ? gen.Qmin
+                    : qMinMvar[i] + gen.Qmin;
+            }
+
+            vgSetpoint[i] = gen.Vg;
+        }
+
+        return (qMaxMvar, qMinMvar, vgSetpoint);
+    }
+
+    // ── Numerical core ────────────────────────────────────────────────────────
 
     private static (double[] P, double[] Q) ComputeInjections(
         SparseYbus ybus,
