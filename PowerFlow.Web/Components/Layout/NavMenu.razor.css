@@ -1,0 +1,25 @@
+.pf-topnav {
+    display: flex;
+    gap: 0.125rem;
+}
+
+.pf-topnav ::deep a {
+    color: rgba(255,255,255,0.45);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.3rem 0.7rem;
+    border-radius: 5px;
+    transition: color 0.12s, background 0.12s;
+}
+
+.pf-topnav ::deep a:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+    text-decoration: none;
+}
+
+.pf-topnav ::deep a.active {
+    color: #fff;
+    background: rgba(255,255,255,0.12);
+}

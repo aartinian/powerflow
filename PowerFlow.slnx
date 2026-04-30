@@ -2,4 +2,5 @@
   <Project Path="PowerFlow.Core/PowerFlow.Core.csproj" />
   <Project Path="PowerFlow.Runner/PowerFlow.Runner.csproj" />
   <Project Path="PowerFlow.Tests/PowerFlow.Tests.csproj" />
+  <Project Path="PowerFlow.Web/PowerFlow.Web.csproj" />
 </Solution>

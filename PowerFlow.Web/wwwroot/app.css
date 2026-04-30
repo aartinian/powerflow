@@ -1,0 +1,212 @@
+/* ── CSS tokens ────────────────────────────────────────── */
+
+:root {
+    /* Layout */
+    --pf-radius: 10px;
+    --pf-radius-sm: 7px;
+
+    /* Light colours */
+    --pf-bg:        #eef2f7;
+    --pf-surface:   #ffffff;
+    --pf-surface-2: #f8fafc;
+    --pf-border:    #e2e8f0;
+    --pf-border-2:  #cbd5e1;
+
+    --pf-text-1: #0f172a;
+    --pf-text-2: #334155;
+    --pf-text-3: #64748b;
+    --pf-text-4: #94a3b8;
+
+    --pf-topbar:        #0c1929;
+    --pf-topbar-border: rgba(255,255,255,0.06);
+
+    --pf-accent:       #2563eb;
+    --pf-accent-hover: #1d4ed8;
+
+    --pf-log-bg:     #111827;
+    --pf-log-text:   #9ca3af;
+    --pf-log-warn:   #f59e0b;
+    --pf-log-header: #1c2d3d;
+    --pf-log-accent: #1e3a5f;
+
+    --pf-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    --pf-hover:  rgba(37,99,235,0.04);
+
+    /* Status — ok */
+    --pf-ok-bg:      #f0fdf4;
+    --pf-ok-border:  #86efac;
+    --pf-ok-text:    #14532d;
+    --pf-ok-icon-bg: #dcfce7;
+    --pf-ok-icon:    #16a34a;
+    --pf-ok-meta:    #166534;
+
+    /* Status — fail */
+    --pf-fail-bg:      #fef2f2;
+    --pf-fail-border:  #fca5a5;
+    --pf-fail-text:    #7f1d1d;
+    --pf-fail-icon-bg: #fee2e2;
+    --pf-fail-icon:    #dc2626;
+
+    /* Status — warn */
+    --pf-warn-bg:     #fffbeb;
+    --pf-warn-border: #fcd34d;
+    --pf-warn-text:   #92400e;
+
+    /* Empty state */
+    --pf-empty-glyph-bg: #eff6ff;
+    --pf-empty-glyph:    #2563eb;
+}
+
+/* ── Dark mode (system preference) ────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --pf-bg:        #0d1625;
+        --pf-surface:   #162035;
+        --pf-surface-2: #0f1a2e;
+        --pf-border:    #1e3050;
+        --pf-border-2:  #2a4060;
+
+        --pf-text-1: #e2e8f0;
+        --pf-text-2: #b0bdc8;
+        --pf-text-3: #7a8fa6;
+        --pf-text-4: #4a6070;
+
+        --pf-topbar:        #080e18;
+        --pf-topbar-border: rgba(255,255,255,0.05);
+
+        --pf-accent:       #3b82f6;
+        --pf-accent-hover: #2563eb;
+
+        --pf-log-bg:     #080e18;
+        --pf-log-text:   #7a9ab5;
+        --pf-log-header: #0f1a2e;
+        --pf-log-accent: #2563eb;
+
+        --pf-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        --pf-hover:  rgba(255,255,255,0.03);
+
+        --pf-ok-bg:      #0a2a18;
+        --pf-ok-border:  #155e2b;
+        --pf-ok-text:    #4ade80;
+        --pf-ok-icon-bg: #052e16;
+        --pf-ok-icon:    #4ade80;
+        --pf-ok-meta:    #4ade80;
+
+        --pf-fail-bg:      #2a0a0a;
+        --pf-fail-border:  #7f1d1d;
+        --pf-fail-text:    #f87171;
+        --pf-fail-icon-bg: #450a0a;
+        --pf-fail-icon:    #f87171;
+
+        --pf-warn-bg:     #1a1200;
+        --pf-warn-border: #7c5c00;
+        --pf-warn-text:   #fcd34d;
+
+        --pf-empty-glyph-bg: #0f1a2e;
+        --pf-empty-glyph:    #3b82f6;
+    }
+}
+
+/* ── Dark mode (explicit toggle) ──────────────────────── */
+
+[data-theme="dark"] {
+    --pf-bg:        #0d1625;
+    --pf-surface:   #162035;
+    --pf-surface-2: #0f1a2e;
+    --pf-border:    #1e3050;
+    --pf-border-2:  #2a4060;
+
+    --pf-text-1: #e2e8f0;
+    --pf-text-2: #b0bdc8;
+    --pf-text-3: #7a8fa6;
+    --pf-text-4: #4a6070;
+
+    --pf-topbar:        #080e18;
+    --pf-topbar-border: rgba(255,255,255,0.05);
+
+    --pf-accent:       #3b82f6;
+    --pf-accent-hover: #2563eb;
+
+    --pf-log-bg:     #080e18;
+    --pf-log-text:   #7a9ab5;
+    --pf-log-header: #0f1a2e;
+    --pf-log-accent: #2563eb;
+
+    --pf-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    --pf-hover:  rgba(255,255,255,0.03);
+
+    --pf-ok-bg:      #0a2a18;
+    --pf-ok-border:  #155e2b;
+    --pf-ok-text:    #4ade80;
+    --pf-ok-icon-bg: #052e16;
+    --pf-ok-icon:    #4ade80;
+    --pf-ok-meta:    #4ade80;
+
+    --pf-fail-bg:      #2a0a0a;
+    --pf-fail-border:  #7f1d1d;
+    --pf-fail-text:    #f87171;
+    --pf-fail-icon-bg: #450a0a;
+    --pf-fail-icon:    #f87171;
+
+    --pf-warn-bg:     #1a1200;
+    --pf-warn-border: #7c5c00;
+    --pf-warn-text:   #fcd34d;
+
+    --pf-empty-glyph-bg: #0f1a2e;
+    --pf-empty-glyph:    #3b82f6;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                 'Helvetica Neue', Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    background: var(--pf-bg);
+    color: var(--pf-text-1);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.2s, color 0.2s;
+}
+
+a { color: var(--pf-accent); }
+a:hover { color: var(--pf-accent-hover); }
+h1:focus { outline: none; }
+
+/* ── Scrollbars ────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--pf-border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--pf-text-4); }
+
+.pf-log::-webkit-scrollbar-thumb { background: #30363d; }
+.pf-log::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+/* ── Theme toggle icon visibility ─────────────────────── */
+
+.pf-theme-toggle .icon-moon { display: none; }
+.pf-theme-toggle .icon-sun  { display: block; }
+
+/* Dark: show sun (to offer switching back to light) */
+[data-theme="dark"] .pf-theme-toggle .icon-moon { display: block; }
+[data-theme="dark"] .pf-theme-toggle .icon-sun  { display: none; }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pf-theme-toggle .icon-moon { display: block; }
+    :root:not([data-theme="light"]) .pf-theme-toggle .icon-sun  { display: none; }
+}
+
+/* ── Blazor error ──────────────────────────────────────── */
+
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+.blazor-error-boundary::after { content: "An error has occurred."; }
