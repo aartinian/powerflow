@@ -107,7 +107,8 @@ public static class MatpowerParser
             x: c[3],
             b: c[4],
             rateA: c[5],
-            // c[6..7] = rateB/C (skipped)
+            rateB: c[6],
+            rateC: c[7],
             tapRatio: c[8],
             phaseShift: c[9],
             isInService: (int)c[10] == 1

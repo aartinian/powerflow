@@ -1,3 +1,4 @@
+using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
@@ -198,5 +199,86 @@ public class SolverValidationTests
         var result = new NewtonRaphsonSolver().Solve(net);
 
         Assert.Empty(result.VoltageViolations);
+    }
+
+    // ─── Out-of-service branches ─────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_OutOfServiceBranch_BranchFlowsCountMatchesInServiceCount()
+    {
+        // case_test.m: 3 branches, branch 2→3 is out of service → expect 2 flow entries.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_test.m"));
+        var inServiceCount = net.Branches.Count(b => b.IsInService);
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(inServiceCount, result.BranchFlows.Count);
+    }
+
+    [Fact]
+    public void Solve_OutOfServiceBranch_OutOfServiceBranchNotInFlows()
+    {
+        // The out-of-service branch 2→3 must not appear in BranchFlows.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_test.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.DoesNotContain(result.BranchFlows, bf => bf.FromBusId == 2 && bf.ToBusId == 3);
+    }
+
+    // ─── Phase-shifting transformer ──────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a minimal 2-bus network: slack → PQ load, connected by a single branch.
+    /// </summary>
+    private static PowerNetwork TwoBusNetwork(double phaseShiftDeg)
+    {
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 100, 50, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var branch = new Branch(
+            fromBus: 1,
+            toBus: 2,
+            r: 0.02,
+            x: 0.10,
+            b: 0,
+            tapRatio: 1.0,
+            phaseShift: phaseShiftDeg,
+            rateA: 0,
+            isInService: true
+        );
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        return new PowerNetwork(100, [slack, load], [branch], [gen]);
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_Converges()
+    {
+        var net = TwoBusNetwork(phaseShiftDeg: 10.0);
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.True(result.Converged, $"Did not converge — mismatch: {result.MaxMismatch:e3} pu");
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_AltersReactiveFlow()
+    {
+        // A non-zero phase shift must produce measurably different branch reactive flows
+        // compared to the same network with zero phase shift.
+        var base0 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 0));
+        var phase5 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 5.0));
+
+        Assert.True(base0.Converged);
+        Assert.True(phase5.Converged);
+        Assert.NotEqual(base0.BranchFlows[0].Qij, phase5.BranchFlows[0].Qij);
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_AltersRealFlow()
+    {
+        // Real power on the branch also changes with phase shift.
+        var base0 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 0));
+        var phase5 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 5.0));
+
+        Assert.True(base0.Converged);
+        Assert.True(phase5.Converged);
+        Assert.NotEqual(base0.BranchFlows[0].Pij, phase5.BranchFlows[0].Pij);
     }
 }

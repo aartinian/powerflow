@@ -106,4 +106,39 @@ public class MatpowerParserTests
         Assert.Equal(0.969, branches[8].TapRatio);
         Assert.Equal(0.932, branches[9].TapRatio);
     }
+
+    // ── RateB / RateC ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_BranchRateB_RateC_WhenZero()
+    {
+        // case_test.m and case14.m have rateB=rateC=0 for all branches.
+        Assert.All(
+            ParseTestCase().Branches,
+            b =>
+            {
+                Assert.Equal(0.0, b.RateB);
+                Assert.Equal(0.0, b.RateC);
+            }
+        );
+    }
+
+    [Fact]
+    public void Parse_Case30_BranchRateB_RateC_NonZero()
+    {
+        // case30.m has identical rateA=rateB=rateC=130 for the first branch (bus 1→2).
+        var branch = MatpowerParser.ParseFile(TestData.Path("case30.m")).Branches[0];
+        Assert.Equal(130.0, branch.RateA);
+        Assert.Equal(130.0, branch.RateB);
+        Assert.Equal(130.0, branch.RateC);
+    }
+
+    [Fact]
+    public void Parse_Case30_AllBranches_RateBEqualsRateC()
+    {
+        // In case30.m every branch has rateA=rateB=rateC (standard format).
+        var branches = MatpowerParser.ParseFile(TestData.Path("case30.m")).Branches;
+        Assert.All(branches, b => Assert.Equal(b.RateA, b.RateC));
+        Assert.All(branches, b => Assert.Equal(b.RateA, b.RateB));
+    }
 }

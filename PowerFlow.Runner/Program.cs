@@ -73,7 +73,9 @@ return 0;
 // Warnings go to stderr so they stand out even when stdout is piped.
 sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
 {
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
     public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
 
     public void Log<TState>(
@@ -81,7 +83,8 @@ sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
         Microsoft.Extensions.Logging.EventId id,
         TState state,
         Exception? exception,
-        Func<TState, Exception?, string> formatter)
+        Func<TState, Exception?, string> formatter
+    )
     {
         string msg = formatter(state, exception);
         if (level >= Microsoft.Extensions.Logging.LogLevel.Warning)

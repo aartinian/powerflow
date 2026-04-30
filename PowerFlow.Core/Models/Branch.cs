@@ -10,6 +10,8 @@ public class Branch
     public double TapRatio { get; } // off-nominal turns ratio
     public double PhaseShift { get; } // deg transformer phase shift
     public double RateA { get; } // MVA normal thermal rating (0 = unconstrained)
+    public double RateB { get; } // MVA short-circuit rating (0 = unconstrained)
+    public double RateC { get; } // MVA emergency rating (0 = unconstrained)
     public bool IsInService { get; }
 
     public Branch(
@@ -21,7 +23,9 @@ public class Branch
         double tapRatio,
         double phaseShift,
         double rateA,
-        bool isInService
+        bool isInService,
+        double rateB = 0,
+        double rateC = 0
     )
     {
         FromBus = fromBus;
@@ -33,6 +37,8 @@ public class Branch
         TapRatio = tapRatio == 0.0 ? 1.0 : tapRatio;
         PhaseShift = phaseShift;
         RateA = rateA;
+        RateB = rateB;
+        RateC = rateC;
         IsInService = isInService;
     }
 }
