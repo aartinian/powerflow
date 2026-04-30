@@ -1,31 +1,31 @@
-function mpc = case14_flatstart
-%CASE14_FLATSTART  IEEE 14-bus case with flat voltage start (Vm=1 pu, Va=0 deg).
-%   Network data identical to case14.m; only the initial Vm/Va columns are changed.
-%   Used to validate the solver from a cold start rather than from near the solution.
+function mpc = case14
+%CASE14  Power flow data for IEEE 14-bus test case.
+%   Values from the MATPOWER 7.x distribution (case14.m).
+%   Used for solver validation against published MATPOWER results.
 
 mpc.version = '2';
 mpc.baseMVA = 100;
 
 %% bus data
-%  bus_i  type  Pd     Qd     Gs  Bs    area  Vm     Va    baseKV  zone  Vmax  Vmin
+%  bus_i  type  Pd     Qd     Gs  Bs    area  Vm      Va        baseKV  zone  Vmax  Vmin
 mpc.bus = [
-    1      3     0      0      0   0     1     1.0    0     0       1     1.06  0.94;
-    2      2     21.7   12.7   0   0     1     1.0    0     0       1     1.06  0.94;
-    3      2     94.2   19.0   0   0     1     1.0    0     0       1     1.06  0.94;
-    4      1     47.8   -3.9   0   0     1     1.0    0     0       1     1.06  0.94;
-    5      1     7.6    1.6    0   0     1     1.0    0     0       1     1.06  0.94;
-    6      2     11.2   7.5    0   0     1     1.0    0     0       1     1.06  0.94;
-    7      1     0      0      0   0     1     1.0    0     0       1     1.06  0.94;
-    8      2     0      0      0   0     1     1.0    0     0       1     1.06  0.94;
-    9      1     29.5   16.6   0   19    1     1.0    0     0       1     1.06  0.94;
-    10     1     9.0    5.8    0   0     1     1.0    0     0       1     1.06  0.94;
-    11     1     3.5    1.8    0   0     1     1.0    0     0       1     1.06  0.94;
-    12     1     6.1    1.6    0   0     1     1.0    0     0       1     1.06  0.94;
-    13     1     13.5   5.8    0   0     1     1.0    0     0       1     1.06  0.94;
-    14     1     14.9   5.0    0   0     1     1.0    0     0       1     1.06  0.94;
+    1      3     0      0      0   0     1     1.060    0.000    0       1     1.06  0.94;
+    2      2     21.7   12.7   0   0     1     1.045   -4.984    0       1     1.06  0.94;
+    3      2     94.2   19.0   0   0     1     1.010  -12.725    0       1     1.06  0.94;
+    4      1     47.8   -3.9   0   0     1     1.019  -10.313    0       1     1.06  0.94;
+    5      1     7.6    1.6    0   0     1     1.020   -8.774    0       1     1.06  0.94;
+    6      2     11.2   7.5    0   0     1     1.070  -14.221    0       1     1.06  0.94;
+    7      1     0      0      0   0     1     1.062  -13.360    0       1     1.06  0.94;
+    8      2     0      0      0   0     1     1.090  -13.360    0       1     1.06  0.94;
+    9      1     29.5   16.6   0   19    1     1.056  -14.939    0       1     1.06  0.94;
+    10     1     9.0    5.8    0   0     1     1.051  -15.097    0       1     1.06  0.94;
+    11     1     3.5    1.8    0   0     1     1.057  -14.791    0       1     1.06  0.94;
+    12     1     6.1    1.6    0   0     1     1.055  -15.076    0       1     1.06  0.94;
+    13     1     13.5   5.8    0   0     1     1.050  -15.156    0       1     1.06  0.94;
+    14     1     14.9   5.0    0   0     1     1.036  -16.034    0       1     1.06  0.94;
 ];
 
-%% generator data  (identical to case14.m)
+%% generator data
 %  bus  Pg      Qg      Qmax  Qmin  Vg     mBase  status  Pmax    Pmin
 mpc.gen = [
     1   232.4   -16.9   10    0     1.060  100    1       332.4   0;
@@ -35,7 +35,7 @@ mpc.gen = [
     8    0.0     17.4   24   -6     1.090  100    1       100.0   0;
 ];
 
-%% branch data  (identical to case14.m)
+%% branch data
 %  fbus  tbus  r        x        b       rateA  rateB  rateC  ratio  angle  status  angmin  angmax
 mpc.branch = [
     1     2     0.01938  0.05917  0.0528  0      0      0      0      0      1       -360    360;

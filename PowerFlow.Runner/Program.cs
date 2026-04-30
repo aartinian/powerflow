@@ -2,9 +2,11 @@ using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
 string path;
+bool flatStart;
 if (args.Length > 0)
 {
     path = args[0];
+    flatStart = false; // user-supplied case: respect bus data
     if (!File.Exists(path))
     {
         Console.Error.WriteLine($"File not found: {path}");
@@ -13,14 +15,19 @@ if (args.Length > 0)
 }
 else
 {
-    path = Path.Combine(AppContext.BaseDirectory, "Data", "case14_flatstart.m");
-    Console.WriteLine($"No input file specified — running bundled IEEE 14-bus demo.");
+    path = Path.Combine(AppContext.BaseDirectory, "Data", "case14.m");
+    flatStart = true; // demo: cold-start from Vm=1, Va=0
+    Console.WriteLine($"No input file specified — running bundled IEEE 14-bus demo (flat start).");
     Console.WriteLine($"Usage: PowerFlow.Runner <path-to-case.m>");
     Console.WriteLine();
 }
 
 var net = MatpowerParser.ParseFile(path);
-var result = new NewtonRaphsonSolver { Log = new ConsoleLogger() }.Solve(net);
+var result = new NewtonRaphsonSolver
+{
+    Log = new ConsoleLogger(),
+    FlatStart = flatStart,
+}.Solve(net);
 Console.WriteLine();
 double mva = net.BaseMva;
 

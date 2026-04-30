@@ -33,8 +33,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_Converges()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(
             result.Converged,
@@ -49,8 +49,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_SlackBusPg()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // MATPOWER reference: slack bus (bus 1) generates 232.4 MW = 2.324 pu
         Assert.Equal(2.324, result.Pg[0], 2); // ±0.005 pu
@@ -59,8 +59,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_PVBusQg()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // MATPOWER runpf result: bus 2 Qg = 43.56 MVAr = 0.4356 pu
         // (The 42.4 MVAr stored in case14.m gen data is the initial dispatch, not the PF solution.)
@@ -98,8 +98,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_BranchFlowCount()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(20, result.BranchFlows.Count); // all 20 case14 branches are in-service
     }
@@ -107,8 +107,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_NoNegativeLosses()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // Real losses P_ij + P_ji = R·|I|² ≥ 0 for every branch.
         foreach (var bf in result.BranchFlows)
@@ -127,8 +127,8 @@ public class SolverValidationTests
     [InlineData(13)] // PQ, tip bus
     public void Solve_Case14_FlatStart_VoltageMagnitude(int busIdx)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(Case14Reference[busIdx].Vm, result.Vm[busIdx], 3); // +/-0.0005 pu
     }
@@ -142,8 +142,8 @@ public class SolverValidationTests
     [InlineData(13)] // PQ, tip bus
     public void Solve_Case14_FlatStart_VoltageAngle(int busIdx)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(Case14Reference[busIdx].Va, result.Va[busIdx], 2); // +/-0.005 degrees
     }
@@ -153,9 +153,9 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_LoadingPct_UnconstrainedIsNaN()
     {
-        // case14_flatstart.m has rateA=0 for all branches — loading % is undefined.
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        // case14.m has rateA=0 for all branches — loading % is undefined.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.All(result.BranchFlows, bf => Assert.True(double.IsNaN(bf.LoadingPct)));
     }
@@ -178,11 +178,11 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_DetectsOvervoltageOnPVBuses()
     {
-        // case14_flatstart.m has Vmax=1.06 for all buses.
+        // case14.m has Vmax=1.06 for all buses.
         // Generator setpoints for buses 6 (Vg=1.07) and 8 (Vg=1.09) exceed that limit;
         // bus 7 (PQ, transformer-connected to bus 8) is pulled above 1.06 as well.
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(3, result.VoltageViolations.Count);
         Assert.All(result.VoltageViolations, v => Assert.True(v.IsOverVoltage));
@@ -199,31 +199,6 @@ public class SolverValidationTests
         var result = new NewtonRaphsonSolver().Solve(net);
 
         Assert.Empty(result.VoltageViolations);
-    }
-
-    // ─── FlatStart option ────────────────────────────────────────────────────
-
-    [Fact]
-    public void Solve_FlatStartOption_MatchesFlatStartCaseFile()
-    {
-        // case14.m has bus Vm/Va near the solution; case14_flatstart.m has the same
-        // network with Vm=1, Va=0 baked in. Solving case14.m with FlatStart=true must
-        // produce results bit-equivalent to solving case14_flatstart.m.
-        var nearSolution = MatpowerParser.ParseFile(TestData.Path("case14.m"));
-        var flatStartFile = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-
-        var resultFromOption = new NewtonRaphsonSolver { FlatStart = true }.Solve(nearSolution);
-        var resultFromFile   = new NewtonRaphsonSolver().Solve(flatStartFile);
-
-        Assert.True(resultFromOption.Converged && resultFromFile.Converged);
-        Assert.Equal(resultFromFile.Iterations, resultFromOption.Iterations);
-        for (int i = 0; i < resultFromFile.Vm.Length; i++)
-        {
-            Assert.Equal(resultFromFile.Vm[i], resultFromOption.Vm[i], 12);
-            Assert.Equal(resultFromFile.Va[i], resultFromOption.Va[i], 12);
-            Assert.Equal(resultFromFile.Pg[i], resultFromOption.Pg[i], 12);
-            Assert.Equal(resultFromFile.Qg[i], resultFromOption.Qg[i], 12);
-        }
     }
 
     // ─── Out-of-service branches ─────────────────────────────────────────────
