@@ -281,4 +281,69 @@ public class SolverValidationTests
         Assert.True(phase5.Converged);
         Assert.NotEqual(base0.BranchFlows[0].Pij, phase5.BranchFlows[0].Pij);
     }
+
+    // ─── Isolated buses ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Two-bus active network (slack + PQ) plus one isolated bus that carries
+    /// load data. The isolated bus must be invisible to the solver and to all
+    /// result fields.
+    /// </summary>
+    private static PowerNetwork NetworkWithIsolatedBus()
+    {
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 50, 20, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        // Bus 3 is isolated: has load data that must NOT appear as generation in results,
+        // and Vm = 0.5 pu which is outside its own [0.4, 0.8] limits only as a
+        // canary — violations for isolated buses must not be reported.
+        var iso = new Bus(3, BusType.Isolated, 30, 10, 0, 0, 0.5, 0, 100, vmax: 0.8, vmin: 0.4);
+        var branch = new Branch(1, 2, 0.02, 0.10, 0, 1.0, 0, 0, true);
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        return new PowerNetwork(100, [slack, load, iso], [branch], [gen]);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_Converges()
+    {
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_ZeroPgQg()
+    {
+        // Load data on an isolated bus must not appear as spurious generation.
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.Equal(0.0, result.Pg[2]);
+        Assert.Equal(0.0, result.Qg[2]);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_NotInVoltageViolations()
+    {
+        // Vm on an isolated bus is not computed by the solver — do not report violations.
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.DoesNotContain(result.VoltageViolations, v => v.BusId == 3);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_DoesNotAffectActiveSolution()
+    {
+        // Adding an isolated bus must not change Vm/Va on the active buses.
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 50, 20, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var branch = new Branch(1, 2, 0.02, 0.10, 0, 1.0, 0, 0, true);
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        var netBase = new PowerNetwork(100, [slack, load], [branch], [gen]);
+
+        var r1 = new NewtonRaphsonSolver().Solve(netBase);
+        var r2 = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.Equal(r1.Vm[0], r2.Vm[0], 10);
+        Assert.Equal(r1.Vm[1], r2.Vm[1], 10);
+        Assert.Equal(r1.Va[1], r2.Va[1], 10);
+    }
 }

@@ -91,7 +91,9 @@ public class NewtonRaphsonSolver
         int totalNrIters = 0;
 
         int inServiceBranches = network.Branches.Count(b => b.IsInService);
-        Info($"NR solve started — {n} buses, {inServiceBranches} branches");
+        int isolatedCount = network.Buses.Count(b => b.Type == BusType.Isolated);
+        string isoNote = isolatedCount > 0 ? $" ({isolatedCount} isolated)" : "";
+        Info($"NR solve started — {n} buses{isoNote}, {inServiceBranches} branches");
         if (EnforceLimits)
             Info($"Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
 
@@ -228,10 +230,14 @@ public class NewtonRaphsonSolver
 
         // Net generation at each bus in pu: Pgen = net injection + load.
         // Zero for load-only buses (P[i] ≈ -Pd[i]/baseMVA → Pg[i] ≈ 0).
+        // Isolated buses have no Y-bus connections so P[i] = Q[i] = 0; their
+        // load data is not served and must not appear as spurious generation.
         var pg = new double[n];
         var qg = new double[n];
         for (int i = 0; i < n; i++)
         {
+            if (network.Buses[i].Type == BusType.Isolated)
+                continue; // pg[i] = qg[i] stay 0
             pg[i] = P[i] + network.Buses[i].Pd / network.BaseMva;
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
@@ -602,12 +608,16 @@ public class NewtonRaphsonSolver
         var vaDeg = Va.Select(a => a * 180.0 / Math.PI).ToArray();
 
         // Voltage violations are only meaningful when the solver converged.
+        // Isolated buses carry no active power; their Vm is whatever the bus data
+        // or flat-start set it to and has no physical significance — skip them.
         var violations = new List<VoltageViolation>();
         if (converged)
         {
             for (int i = 0; i < network.Buses.Count; i++)
             {
                 var bus = network.Buses[i];
+                if (bus.Type == BusType.Isolated)
+                    continue;
                 if (Vm[i] < bus.Vmin || Vm[i] > bus.Vmax)
                     violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax));
             }
