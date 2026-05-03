@@ -19,6 +19,7 @@ public static class NetworkValidator
         CheckConnectivity(network, errors);
         CheckBusVoltageLimits(network, errors);
         CheckBranchParameters(network, errors);
+        CheckGeneratorPLimits(network, errors);
 
         return errors.Count == 0 ? ValidationResult.Ok : new ValidationResult(errors);
     }
@@ -205,6 +206,38 @@ public static class NetworkValidator
                     new ValidationError(
                         "PHASE_SHIFT_OUT_OF_RANGE",
                         $"Branch {br.FromBus}→{br.ToBus}: phase shift {br.PhaseShift:F1}° is outside ±90°.",
+                        ValidationSeverity.Warning
+                    )
+                );
+        }
+    }
+
+    /// <summary>
+    /// Warns when an in-service generator's scheduled real-power output lies
+    /// outside its declared capacity band [Pmin, Pmax]. The power-flow equations
+    /// are still solvable with the given Pg, but the dispatch is operationally
+    /// infeasible and may indicate a data error in the case file.
+    /// Out-of-service generators are skipped; their Pg is irrelevant to the solve.
+    /// </summary>
+    private static void CheckGeneratorPLimits(PowerNetwork network, List<ValidationError> errors)
+    {
+        foreach (var gen in network.Generators.Where(g => g.IsInService))
+        {
+            if (gen.Pg > gen.Pmax)
+                errors.Add(
+                    new ValidationError(
+                        "GENERATOR_P_ABOVE_PMAX",
+                        $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW exceeds "
+                            + $"Pmax = {gen.Pmax:F1} MW.",
+                        ValidationSeverity.Warning
+                    )
+                );
+            else if (gen.Pg < gen.Pmin)
+                errors.Add(
+                    new ValidationError(
+                        "GENERATOR_P_BELOW_PMIN",
+                        $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW is below "
+                            + $"Pmin = {gen.Pmin:F1} MW.",
                         ValidationSeverity.Warning
                     )
                 );

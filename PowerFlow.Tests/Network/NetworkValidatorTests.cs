@@ -509,4 +509,87 @@ public class NetworkValidatorTests
             $"Expected ≥2 errors, got: {string.Join(", ", result.FatalErrors.Select(e => e.Code))}"
         );
     }
+
+    // ── GENERATOR_P_ABOVE_PMAX / GENERATOR_P_BELOW_PMIN ──────────────────────
+
+    /// <summary>Generator with Pg above its Pmax.</summary>
+    private static Generator OverloadedGen(int busId) =>
+        new(busId, pg: 250, qg: 0, qmax: 200, qmin: -200, vg: 1.0, pmax: 200, pmin: 0, isInService: true);
+
+    /// <summary>Generator with Pg below its Pmin.</summary>
+    private static Generator UnderloadedGen(int busId) =>
+        new(busId, pg: 5, qg: 0, qmax: 200, qmin: -200, vg: 1.0, pmax: 200, pmin: 50, isInService: true);
+
+    [Fact]
+    public void Validate_PgExceedsPmax_IsWarningNotError()
+    {
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [OverloadedGen(1)]);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.True(result.IsValid); // warning, not a fatal error
+        Assert.Contains(result.Warnings, w => w.Code == "GENERATOR_P_ABOVE_PMAX");
+    }
+
+    [Fact]
+    public void Validate_PgBelowPmin_IsWarningNotError()
+    {
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [UnderloadedGen(1)]);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.True(result.IsValid);
+        Assert.Contains(result.Warnings, w => w.Code == "GENERATOR_P_BELOW_PMIN");
+    }
+
+    [Fact]
+    public void Validate_PgAbovePmax_WarningMessageContainsBusId()
+    {
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [OverloadedGen(1)]);
+        var warn = NetworkValidator.Validate(net).Warnings.Single(w => w.Code == "GENERATOR_P_ABOVE_PMAX");
+
+        Assert.Contains("1", warn.Message); // bus id
+    }
+
+    [Fact]
+    public void Validate_PgAtPmax_NoPmaxWarning()
+    {
+        // Pg == Pmax is exactly on the boundary — not a violation.
+        var gen = new Generator(1, pg: 200, qg: 0, qmax: 200, qmin: -200, vg: 1.0, pmax: 200, pmin: 0, isInService: true);
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [gen]);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Warnings, w => w.Code == "GENERATOR_P_ABOVE_PMAX");
+    }
+
+    [Fact]
+    public void Validate_PgAtPmin_NoPminWarning()
+    {
+        // Pg == Pmin is exactly on the boundary — not a violation.
+        var gen = new Generator(1, pg: 50, qg: 0, qmax: 200, qmin: -200, vg: 1.0, pmax: 200, pmin: 50, isInService: true);
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [gen]);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Warnings, w => w.Code == "GENERATOR_P_BELOW_PMIN");
+    }
+
+    [Fact]
+    public void Validate_OutOfServiceGenerator_PgExceedsPmax_NoWarning()
+    {
+        // Out-of-service generators are not dispatched — their Pg is irrelevant.
+        var gen = new Generator(1, pg: 999, qg: 0, qmax: 200, qmin: -200, vg: 1.0, pmax: 100, pmin: 0, isInService: false);
+        var net = new PowerNetwork(100, [Slack(1), PQ(2)], [Line(1, 2)], [gen]);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Warnings, w => w.Code == "GENERATOR_P_ABOVE_PMAX");
+    }
+
+    [Fact]
+    public void Validate_Case14_NoGeneratorPLimitWarnings()
+    {
+        // All case14 generators are dispatched within their declared Pmin/Pmax.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Warnings, w =>
+            w.Code == "GENERATOR_P_ABOVE_PMAX" || w.Code == "GENERATOR_P_BELOW_PMIN");
+    }
 }
