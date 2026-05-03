@@ -382,6 +382,113 @@ public class NetworkValidatorTests
         Assert.Contains("BRANCH_TO_BUS_MISSING", ex.Message);
     }
 
+    // ── NETWORK_ISLANDED ──────────────────────────────────────────────────────
+
+    private static Bus Isolated(int id) =>
+        new(id, BusType.Isolated, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+
+    [Fact]
+    public void Validate_ConnectedNetwork_NoIslandError()
+    {
+        // Fully connected 4-bus ring: no islands.
+        var net = new PowerNetwork(
+            100,
+            [Slack(1), PQ(2), PQ(3), PQ(4)],
+            [Line(1, 2), Line(2, 3), Line(3, 4), Line(4, 1)],
+            [Gen(1)]
+        );
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Errors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
+    [Fact]
+    public void Validate_DisconnectedPQBus_ReturnsIslandError()
+    {
+        // Bus 4 has no branch — island.
+        var net = new PowerNetwork(
+            100,
+            [Slack(1), PQ(2), PQ(3), PQ(4)],
+            [Line(1, 2), Line(2, 3)],
+            [Gen(1)]
+        );
+        var result = NetworkValidator.Validate(net);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.FatalErrors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
+    [Fact]
+    public void Validate_IslandError_MessageListsStrandedBusIds()
+    {
+        var net = new PowerNetwork(
+            100,
+            [Slack(1), PQ(2), PQ(3), PQ(4)],
+            [Line(1, 2), Line(2, 3)],
+            [Gen(1)]
+        );
+        var err = NetworkValidator
+            .Validate(net)
+            .FatalErrors.Single(e => e.Code == "NETWORK_ISLANDED");
+
+        // Bus 4 is the only stranded bus.
+        Assert.Contains("4", err.Message);
+    }
+
+    [Fact]
+    public void Validate_OutOfServiceBridgeBranch_ReturnsIslandError()
+    {
+        // Buses 3 and 4 are only connected to the rest via an out-of-service branch.
+        var net = new PowerNetwork(
+            100,
+            [Slack(1), PQ(2), PQ(3), PQ(4)],
+            [Line(1, 2), Line(2, 3, inService: false), Line(3, 4)],
+            [Gen(1)]
+        );
+        var result = NetworkValidator.Validate(net);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.FatalErrors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
+    [Fact]
+    public void Validate_IsolatedBusType4_NotFlaggedAsIsland()
+    {
+        // Bus 3 is type Isolated (4): explicitly not part of the active network.
+        var net = new PowerNetwork(
+            100,
+            [Slack(1), PQ(2), Isolated(3)],
+            [Line(1, 2)],
+            [Gen(1)]
+        );
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Errors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
+    [Fact]
+    public void Validate_NoSlackBus_ConnectivityCheckSkipped_NoException()
+    {
+        // When there is no slack bus, connectivity check must exit gracefully —
+        // the NO_SLACK_BUS error covers the failure; no NullReferenceException.
+        var net = new PowerNetwork(100, [PQ(1), PQ(2)], [Line(1, 2)], []);
+        var result = NetworkValidator.Validate(net);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.FatalErrors, e => e.Code == "NO_SLACK_BUS");
+        // Connectivity error must NOT also fire (check was skipped).
+        Assert.DoesNotContain(result.FatalErrors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
+    [Fact]
+    public void Validate_Case14_NoIslandError()
+    {
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = NetworkValidator.Validate(net);
+
+        Assert.DoesNotContain(result.Errors, e => e.Code == "NETWORK_ISLANDED");
+    }
+
     // ── Multiple errors ───────────────────────────────────────────────────────
 
     [Fact]

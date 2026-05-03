@@ -16,6 +16,7 @@ public static class NetworkValidator
         CheckBranchBusRefs(network, busIds, errors);
         CheckGeneratorBusRefs(network, busIds, errors);
         CheckInServiceBranches(network, errors);
+        CheckConnectivity(network, errors);
         CheckBusVoltageLimits(network, errors);
         CheckBranchParameters(network, errors);
 
@@ -106,6 +107,69 @@ public static class NetworkValidator
                 )
             );
         }
+    }
+
+    /// <summary>
+    /// Verifies that every non-isolated bus is reachable from the slack bus via
+    /// in-service branches. Reports <c>NETWORK_ISLANDED</c> when one or more buses
+    /// form a disconnected island; the Y-bus for such a network would be singular
+    /// and the solver would fail or silently diverge.
+    /// </summary>
+    private static void CheckConnectivity(PowerNetwork network, List<ValidationError> errors)
+    {
+        // If there is no slack bus the NO_SLACK_BUS check has already fired;
+        // a reachability check from a missing reference bus is meaningless.
+        var slackBus = network.Buses.FirstOrDefault(b => b.Type == BusType.Slack);
+        if (slackBus is null)
+            return;
+
+        // If no branches are in service, NO_IN_SERVICE_BRANCHES already fires as a
+        // warning — adding NETWORK_ISLANDED on top would be redundant noise.
+        if (!network.Branches.Any(b => b.IsInService))
+            return;
+
+        // Undirected adjacency list built from in-service branches whose endpoints are known.
+        var adj = network.Buses.ToDictionary(b => b.Id, _ => new List<int>());
+        foreach (var br in network.Branches)
+        {
+            if (!br.IsInService)
+                continue;
+            if (!adj.ContainsKey(br.FromBus) || !adj.ContainsKey(br.ToBus))
+                continue; // missing endpoint already flagged by CheckBranchBusRefs
+            adj[br.FromBus].Add(br.ToBus);
+            adj[br.ToBus].Add(br.FromBus);
+        }
+
+        // BFS from the slack bus.
+        var visited = new HashSet<int> { slackBus.Id };
+        var queue = new Queue<int>();
+        queue.Enqueue(slackBus.Id);
+        while (queue.Count > 0)
+        {
+            foreach (var nb in adj[queue.Dequeue()])
+                if (visited.Add(nb))
+                    queue.Enqueue(nb);
+        }
+
+        // Non-isolated buses not reached by BFS are stranded in an island.
+        var stranded = network
+            .Buses.Where(b => b.Type != BusType.Isolated && !visited.Contains(b.Id))
+            .Select(b => b.Id)
+            .OrderBy(id => id)
+            .ToList();
+
+        if (stranded.Count == 0)
+            return;
+
+        var ids = string.Join(", ", stranded);
+        errors.Add(
+            new ValidationError(
+                "NETWORK_ISLANDED",
+                $"{stranded.Count} bus(es) unreachable from slack bus {slackBus.Id}: {ids}. "
+                    + "Each island needs its own slack bus, or mark disconnected buses as "
+                    + "type Isolated (4)."
+            )
+        );
     }
 
     private static void CheckBusVoltageLimits(PowerNetwork network, List<ValidationError> errors)
