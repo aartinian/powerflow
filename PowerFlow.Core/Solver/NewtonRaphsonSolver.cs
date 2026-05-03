@@ -28,6 +28,16 @@ public class NewtonRaphsonSolver
     public int MaxLimitIterations { get; init; } = 10;
 
     /// <summary>
+    /// Maximum number of step halvings in the backtracking line search applied
+    /// after each Newton-Raphson correction. The solver tries μ = 1, ½, ¼, …,
+    /// 2<sup>−MaxStepHalvings</sup> and accepts the first μ that reduces ‖f‖∞.
+    /// Set to 0 to disable line search (pure Newton, μ = 1 always). Default 10
+    /// matches MATPOWER. For well-conditioned networks μ = 1 is accepted on the
+    /// first try; the search adds negligible overhead in the common case.
+    /// </summary>
+    public int MaxStepHalvings { get; init; } = 10;
+
+    /// <summary>
     /// When true, the initial voltage state is overridden to a flat profile
     /// (Vm = 1.0 pu, Va = 0°) regardless of what the bus data specifies.
     /// Generator Vg setpoints are still applied at PV and slack buses, so the
@@ -155,13 +165,22 @@ public class NewtonRaphsonSolver
                     var J = BuildJacobian(ybus, Vm, Va, P, Q, pvpq, pqList);
                     var dx = SolveLinear(J, f);
 
-                    // Apply correction.
-                    // Angles: additive (Δθ in radians).
-                    // Voltages: scaled update — dx holds ΔV/V, so ΔV = V·(ΔV/V).
+                    // Backtracking line search: find the largest μ = 2^{−k} that
+                    // reduces ‖f‖∞. For well-conditioned networks μ = 1 on the first
+                    // try; the search adds negligible overhead in the common case.
+                    double mu = FindStepSize(
+                        ybus, Vm, Va, Psch, Qsch, pvpq, pqList, dx, mismatch, npvpq
+                    );
+                    if (mu < 1.0)
+                        Info($"    step limited: μ = {mu:F4}");
+
+                    // Apply the μ-scaled correction.
+                    // Angles: Δθ (rad) added directly.
+                    // Voltages: Vᵢ_new = Vᵢ_old · (1 + μ · ΔV/V).
                     for (int k = 0; k < npvpq; k++)
-                        Va[pvpq[k]] += dx[k];
+                        Va[pvpq[k]] += mu * dx[k];
                     for (int k = 0; k < npq; k++)
-                        Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
+                        Vm[pqList[k]] *= 1.0 + mu * dx[npvpq + k];
                 }
 
                 if (!converged)
@@ -465,6 +484,62 @@ public class NewtonRaphsonSolver
     }
 
     // ── Numerical core ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Backtracking line search over μ = 1, ½, ¼, …, 2<sup>−MaxStepHalvings</sup>.
+    /// Evaluates the mismatch at the tentative point x + μ·dx and returns the first
+    /// μ that reduces ‖f‖∞ below <paramref name="currentMismatch"/>. When
+    /// <see cref="MaxStepHalvings"/> is 0 the search is disabled and 1.0 is returned
+    /// immediately. Falls through to the smallest tried μ when no halvings help —
+    /// the caller's convergence check then decides whether to declare failure.
+    /// </summary>
+    private double FindStepSize(
+        SparseYbus ybus,
+        double[] Vm,
+        double[] Va,
+        double[] Psch,
+        double[] Qsch,
+        List<int> pvpq,
+        List<int> pqList,
+        double[] dx,
+        double currentMismatch,
+        int npvpq
+    )
+    {
+        if (MaxStepHalvings == 0)
+            return 1.0;
+
+        int n = Vm.Length;
+        int npq = pqList.Count;
+        var VmTry = new double[n];
+        var VaTry = new double[n];
+
+        for (int h = 0; h <= MaxStepHalvings; h++)
+        {
+            double mu = Math.Pow(0.5, h); // 1, ½, ¼, …, 2^{−MaxStepHalvings}
+
+            Array.Copy(Vm, VmTry, n);
+            Array.Copy(Va, VaTry, n);
+            for (int k = 0; k < npvpq; k++)
+                VaTry[pvpq[k]] += mu * dx[k];
+            for (int k = 0; k < npq; k++)
+                VmTry[pqList[k]] *= 1.0 + mu * dx[npvpq + k];
+
+            var (Ptry, Qtry) = ComputeInjections(ybus, VmTry, VaTry);
+
+            double tryMismatch = 0.0;
+            foreach (int i in pvpq)
+                tryMismatch = Math.Max(tryMismatch, Math.Abs(Psch[i] - Ptry[i]));
+            foreach (int i in pqList)
+                tryMismatch = Math.Max(tryMismatch, Math.Abs(Qsch[i] - Qtry[i]));
+
+            if (tryMismatch < currentMismatch)
+                return mu;
+        }
+
+        // No halving improved the mismatch; return the smallest tried step.
+        return Math.Pow(0.5, MaxStepHalvings);
+    }
 
     private static (double[] P, double[] Q) ComputeInjections(
         SparseYbus ybus,
