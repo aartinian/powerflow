@@ -23,6 +23,8 @@ public static class MatpowerParser
         var generators = ExtractBlock(lines, "gen").Select(ParseGenerator).ToList();
         var branches = ExtractBlock(lines, "branch").Select(ParseBranch).ToList();
 
+        FoldShunts(lines, buses);
+
         return new PowerNetwork(baseMva, buses, branches, generators);
     }
 
@@ -119,6 +121,44 @@ public static class MatpowerParser
             phaseShift: c[9],
             isInService: (int)c[10] == 1
         );
+
+    // mpc.shunt columns: bus Gs Bs (MW / MVAr at 1 pu — same units as mpc.bus cols 5-6).
+    // Shunt admittances are additive with the inline Gs/Bs already in the bus data.
+    // Multiple rows for the same bus are accumulated (non-standard but safe to handle).
+    private static void FoldShunts(string[] lines, List<Bus> buses)
+    {
+        var shunts = new Dictionary<int, (double Gs, double Bs)>();
+        foreach (var c in ExtractBlock(lines, "shunt"))
+        {
+            int id = (int)c[0];
+            shunts[id] = shunts.TryGetValue(id, out var prev)
+                ? (prev.Gs + c[1], prev.Bs + c[2])
+                : (c[1], c[2]);
+        }
+
+        if (shunts.Count == 0)
+            return;
+
+        for (int i = 0; i < buses.Count; i++)
+        {
+            var b = buses[i];
+            if (!shunts.TryGetValue(b.Id, out var s))
+                continue;
+            buses[i] = new Bus(
+                b.Id,
+                b.Type,
+                b.Pd,
+                b.Qd,
+                b.Gs + s.Gs,
+                b.Bs + s.Bs,
+                b.Vm,
+                b.Va,
+                b.BaseKv,
+                b.Vmax,
+                b.Vmin
+            );
+        }
+    }
 
     private static string StripComment(string line)
     {

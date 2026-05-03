@@ -1,5 +1,6 @@
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
+using PowerFlow.Core.Solver;
 
 namespace PowerFlow.Tests.Parsing;
 
@@ -140,5 +141,69 @@ public class MatpowerParserTests
         var branches = MatpowerParser.ParseFile(TestData.Path("case30.m")).Branches;
         Assert.All(branches, b => Assert.Equal(b.RateA, b.RateC));
         Assert.All(branches, b => Assert.Equal(b.RateA, b.RateB));
+    }
+
+    // ── mpc.shunt block ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_ShuntBlock_FoldsIntoMatchingBusAdmittance()
+    {
+        // case_shunt.m: bus 2 has Bs=0 in mpc.bus; mpc.shunt adds Bs=10 → result Bs=10.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_shunt.m"));
+
+        Assert.Equal(10.0, net.Buses[1].Bs);
+    }
+
+    [Fact]
+    public void Parse_ShuntBlock_GsZeroWhenShuntHasZeroGs()
+    {
+        // The mpc.shunt entry has Gs=0, so net Gs on bus 2 must stay 0.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_shunt.m"));
+
+        Assert.Equal(0.0, net.Buses[1].Gs);
+    }
+
+    [Fact]
+    public void Parse_ShuntBlock_OtherBusesUnaffected()
+    {
+        // Bus 1 (slack) has no shunt entry — its Gs and Bs must stay 0.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_shunt.m"));
+
+        Assert.Equal(0.0, net.Buses[0].Gs);
+        Assert.Equal(0.0, net.Buses[0].Bs);
+    }
+
+    [Fact]
+    public void Parse_ShuntBlock_SolveMatchesEquivalentDirectBusData()
+    {
+        // The parsed case_shunt.m (shunt via mpc.shunt) must produce the same
+        // power-flow solution as an equivalent network with Bs=10 in the bus data.
+        var netFromFile = MatpowerParser.ParseFile(TestData.Path("case_shunt.m"));
+
+        // Equivalent network: same topology but Bs=10 declared directly on bus 2.
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 100, 50, 0, 10, 1.0, 0, 100, 1.1, 0.9);
+        var branch = new Branch(1, 2, 0.02, 0.10, 0, 1.0, 0, 200, true);
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 400, 0, true);
+        var netRef = new PowerNetwork(100, [slack, load], [branch], [gen]);
+
+        var solver = new NewtonRaphsonSolver();
+        var rFile = solver.Solve(netFromFile);
+        var rRef = solver.Solve(netRef);
+
+        Assert.True(rFile.Converged);
+        Assert.True(rRef.Converged);
+        Assert.Equal(rRef.Vm[0], rFile.Vm[0], 8);
+        Assert.Equal(rRef.Vm[1], rFile.Vm[1], 8);
+        Assert.Equal(rRef.Va[1], rFile.Va[1], 8);
+    }
+
+    [Fact]
+    public void Parse_NoShuntBlock_ParsesWithoutError()
+    {
+        // Cases without mpc.shunt (the majority) must parse normally.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+
+        Assert.Equal(14, net.Buses.Count);
     }
 }
