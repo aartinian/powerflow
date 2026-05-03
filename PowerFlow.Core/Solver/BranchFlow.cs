@@ -1,5 +1,10 @@
 namespace PowerFlow.Core.Solver;
 
+/// <summary>
+/// Solved complex power flow at both ends of one in-service branch.
+/// P_ij + P_ji ≥ 0 is the real power loss on the line. Subscript ij is the
+/// from-end injection into the branch; ji is the to-end injection.
+/// </summary>
 public class BranchFlow
 {
     public int FromBusId { get; }

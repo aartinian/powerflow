@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
@@ -22,12 +23,13 @@ else
     Console.WriteLine();
 }
 
+using var loggerFactory = LoggerFactory.Create(builder =>
+    builder.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Information)
+);
+var log = loggerFactory.CreateLogger("PowerFlow");
+
 var net = MatpowerParser.ParseFile(path);
-var result = new NewtonRaphsonSolver
-{
-    Log = new ConsoleLogger(),
-    FlatStart = flatStart,
-}.Solve(net);
+var result = new NewtonRaphsonSolver { Log = log, FlatStart = flatStart }.Solve(net);
 Console.WriteLine();
 double mva = net.BaseMva;
 
@@ -75,28 +77,3 @@ if (result.VoltageViolations.Count > 0)
 }
 
 return 0;
-
-// Minimal ILogger that writes directly to the console without any category/level prefix.
-// Warnings go to stderr so they stand out even when stdout is piped.
-sealed class ConsoleLogger : Microsoft.Extensions.Logging.ILogger
-{
-    public IDisposable? BeginScope<TState>(TState state)
-        where TState : notnull => null;
-
-    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel level) => true;
-
-    public void Log<TState>(
-        Microsoft.Extensions.Logging.LogLevel level,
-        Microsoft.Extensions.Logging.EventId id,
-        TState state,
-        Exception? exception,
-        Func<TState, Exception?, string> formatter
-    )
-    {
-        string msg = formatter(state, exception);
-        if (level >= Microsoft.Extensions.Logging.LogLevel.Warning)
-            Console.Error.WriteLine(msg);
-        else
-            Console.WriteLine(msg);
-    }
-}

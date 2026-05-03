@@ -1,5 +1,12 @@
 namespace PowerFlow.Core.Solver;
 
+/// <summary>
+/// The output of <see cref="NewtonRaphsonSolver.Solve"/>. Holds the solved
+/// bus state (Vm/Va), per-bus net generation (Pg/Qg), per-branch flows, and
+/// any voltage-limit violations. When <see cref="Converged"/> is false the
+/// numeric arrays still reflect the last NR iteration but are not a valid
+/// solution; <see cref="VoltageViolations"/> is empty in that case.
+/// </summary>
 public class PowerFlowResult
 {
     public bool Converged { get; }

@@ -1,5 +1,11 @@
 namespace PowerFlow.Core.Models;
 
+/// <summary>
+/// Immutable network data for one transmission line or transformer using the
+/// off-nominal-tap π model. R, X, B are in pu on the network base; ratings
+/// are in MVA; PhaseShift is in degrees. <see cref="TapRatio"/> is normalised
+/// to 1.0 when the input is 0 (MATPOWER convention for plain lines).
+/// </summary>
 public class Branch
 {
     public int FromBus { get; }

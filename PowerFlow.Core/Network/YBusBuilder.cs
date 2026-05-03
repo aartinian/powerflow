@@ -3,6 +3,12 @@ using PowerFlow.Core.Models;
 
 namespace PowerFlow.Core.Network;
 
+/// <summary>
+/// Builds the sparse bus admittance matrix Y from a network. Uses the
+/// off-nominal-tap π model for branches, includes bus shunts (Gs/Bs), and
+/// skips out-of-service branches. Output is a <see cref="SparseYbus"/>
+/// optimised for the per-iteration access pattern of Newton-Raphson.
+/// </summary>
 public static class YBusBuilder
 {
     public static SparseYbus Build(PowerNetwork network)

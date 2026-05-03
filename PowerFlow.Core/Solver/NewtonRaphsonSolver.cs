@@ -1,4 +1,3 @@
-using System.Numerics;
 using CSparse;
 using CSparse.Double.Factorization;
 using CSparse.Storage;
@@ -8,6 +7,14 @@ using PowerFlow.Core.Network;
 
 namespace PowerFlow.Core.Solver;
 
+/// <summary>
+/// AC power-flow solver using polar-form Newton-Raphson with a sparse LU
+/// kernel (CSparse). Configure with init-only properties (<see cref="Tolerance"/>,
+/// <see cref="MaxIterations"/>, <see cref="EnforceLimits"/>, <see cref="FlatStart"/>,
+/// <see cref="MaxLimitIterations"/>, <see cref="Log"/>) and call
+/// <see cref="Solve"/>. The solver is stateless between calls; reuse a single
+/// instance or create a new one freely.
+/// </summary>
 public class NewtonRaphsonSolver
 {
     public double Tolerance { get; init; } = 1e-6; // pu — matches MATPOWER default
@@ -42,6 +49,22 @@ public class NewtonRaphsonSolver
 
     private void Warn(string msg) => Log?.LogWarning("{Message}", msg);
 
+    /// <summary>
+    /// Solve the AC power flow for the given network using polar-form
+    /// Newton-Raphson with sparse LU factorisation. The network must contain
+    /// exactly one slack bus; validate first with <see cref="NetworkValidator"/>
+    /// to surface other issues (missing bus references, bad tap ratios, etc.)
+    /// before calling.
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="EnforceLimits"/> is on, an outer loop switches PV↔PQ
+    /// buses as their reactive output crosses generator Q-limits, capped at
+    /// <see cref="MaxLimitIterations"/>. When <see cref="FlatStart"/> is on,
+    /// the initial Vm/Va comes from a flat profile rather than the bus data.
+    /// The returned result is always non-null; check
+    /// <see cref="PowerFlowResult.Converged"/> to know whether the solution
+    /// is trustworthy.
+    /// </remarks>
     public PowerFlowResult Solve(PowerNetwork network)
     {
         var ybus = YBusBuilder.Build(network);
@@ -68,141 +91,105 @@ public class NewtonRaphsonSolver
         int totalNrIters = 0;
 
         int inServiceBranches = network.Branches.Count(b => b.IsInService);
-        Info($"> NR solve started — {n} buses, {inServiceBranches} branches");
+        Info($"NR solve started — {n} buses, {inServiceBranches} branches");
         if (EnforceLimits)
-            Info($"> Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
+            Info($"Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
 
-        bool limitViolated;
+        bool limitViolated = false;
         int limitIter = 0;
-        do
+
+        // Single slack-bus network: no NR equations to solve, just compute injections.
+        // Q-limit switching can never reduce pvList+pqList to empty, so this is invariant.
+        if (pvList.Count + pqList.Count == 0)
         {
-            limitViolated = false;
-            limitIter++;
-            if (EnforceLimits)
-                Info($"> outer iter {limitIter, 2}/{MaxLimitIterations}");
-
-            // pvpq = all non-slack buses: PV first, then PQ (including any that were switched).
-            // This ordering determines the row/column layout of the Jacobian.
-            var pvpq = pvList.Concat(pqList).ToList();
-            int npvpq = pvpq.Count;
-            int npq = pqList.Count;
-            int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
-
-            if (jDim == 0)
+            Info($"single slack-bus network — trivially solved");
+            (P, Q) = ComputeInjections(ybus, Vm, Va);
+            converged = true;
+            iterations = 0;
+            mismatch = 0.0;
+        }
+        else
+        {
+            do
             {
-                // Single slack-bus network — nothing to solve.
-                (P, Q) = ComputeInjections(ybus, Vm, Va);
-                converged = true;
-                iterations = 0;
-                mismatch = 0.0;
-                Info($">  single slack-bus network — trivially solved");
-                break;
-            }
+                limitViolated = false;
+                limitIter++;
+                if (EnforceLimits)
+                    Info($"outer iter {limitIter, 2}/{MaxLimitIterations}");
 
-            converged = false;
+                // pvpq = all non-slack buses: PV first, then PQ (including any that were switched).
+                // This ordering determines the row/column layout of the Jacobian.
+                var pvpq = pvList.Concat(pqList).ToList();
+                int npvpq = pvpq.Count;
+                int npq = pqList.Count;
+                int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
 
-            for (int iter = 0; iter < MaxIterations; iter++)
-            {
-                (P, Q) = ComputeInjections(ybus, Vm, Va);
+                converged = false;
 
-                // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
-                var f = new double[jDim];
-                for (int k = 0; k < npvpq; k++)
-                    f[k] = Psch[pvpq[k]] - P[pvpq[k]];
-                for (int k = 0; k < npq; k++)
-                    f[npvpq + k] = Qsch[pqList[k]] - Q[pqList[k]];
-
-                mismatch = f.Max(v => Math.Abs(v));
-                Info(
-                    $">  iter {iter + 1, 3}  mismatch  {mismatch:e4} pu"
-                        + (mismatch < Tolerance ? " converged" : "")
-                );
-                if (mismatch < Tolerance)
+                for (int iter = 0; iter < MaxIterations; iter++)
                 {
-                    converged = true;
-                    iterations = iter;
-                    totalNrIters += iter + 1;
-                    break;
+                    (P, Q) = ComputeInjections(ybus, Vm, Va);
+
+                    // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
+                    var f = new double[jDim];
+                    for (int k = 0; k < npvpq; k++)
+                        f[k] = Psch[pvpq[k]] - P[pvpq[k]];
+                    for (int k = 0; k < npq; k++)
+                        f[npvpq + k] = Qsch[pqList[k]] - Q[pqList[k]];
+
+                    mismatch = f.Max(v => Math.Abs(v));
+                    Info(
+                        $"  iter {iter + 1, 3}  mismatch  {mismatch:e4} pu"
+                            + (mismatch < Tolerance ? " converged" : "")
+                    );
+                    if (mismatch < Tolerance)
+                    {
+                        converged = true;
+                        iterations = iter;
+                        totalNrIters += iter + 1;
+                        break;
+                    }
+
+                    var J = BuildJacobian(ybus, Vm, Va, P, Q, pvpq, pqList);
+                    var dx = SolveLinear(J, f);
+
+                    // Apply correction.
+                    // Angles: additive (Δθ in radians).
+                    // Voltages: scaled update — dx holds ΔV/V, so ΔV = V·(ΔV/V).
+                    for (int k = 0; k < npvpq; k++)
+                        Va[pvpq[k]] += dx[k];
+                    for (int k = 0; k < npq; k++)
+                        Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
                 }
 
-                var J = BuildJacobian(ybus, Vm, Va, P, Q, pvpq, pqList);
-                var dx = SolveLinear(J, f);
-
-                // Apply correction.
-                // Angles: additive (Δθ in radians).
-                // Voltages: scaled update — dx holds ΔV/V, so ΔV = V·(ΔV/V).
-                for (int k = 0; k < npvpq; k++)
-                    Va[pvpq[k]] += dx[k];
-                for (int k = 0; k < npq; k++)
-                    Vm[pqList[k]] += Vm[pqList[k]] * dx[npvpq + k];
-            }
-
-            if (!converged)
-            {
-                totalNrIters += MaxIterations;
-                Warn(
-                    $"NR did not converge after {MaxIterations} iterations  mismatch {mismatch:e2} pu"
-                );
-                break; // bail out of limit loop — report non-convergence as-is
-            }
-
-            if (EnforceLimits)
-            {
-                // 1. PQ→PV recovery: a previously switched bus whose limit is no longer binding.
-                //    Qmax switch: limit not binding when Vm has risen above the setpoint.
-                //    Qmin switch: limit not binding when Vm has fallen below the setpoint.
-                foreach (int i in switchedAtMax.Keys.ToList())
+                if (!converged)
                 {
-                    double vg = vgSetpoint[i];
-                    bool canRecover = switchedAtMax[i] ? Vm[i] > vg : Vm[i] < vg;
-                    if (canRecover)
-                    {
-                        string recLabel = switchedAtMax[i]
-                            ? $"Vm={Vm[i]:F4} > Vg={vg:F4}  [max recovered]"
-                            : $"Vm={Vm[i]:F4} < Vg={vg:F4}  [min recovered]";
-                        Info($">  Q-limit: bus {network.Buses[i].Id, 4} PQ→PV  {recLabel}");
-                        pqList.Remove(i);
-                        pvList.Add(i);
-                        Vm[i] = vg; // restore regulated voltage
-                        switchedAtMax.Remove(i);
-                        limitViolated = true;
-                    }
+                    totalNrIters += MaxIterations;
+                    Warn(
+                        $"NR did not converge after {MaxIterations} iterations  mismatch {mismatch:e2} pu"
+                    );
+                    break; // bail out of limit loop — report non-convergence as-is
                 }
 
-                // 2. PV→PQ switching: check reactive limits on still-PV buses.
-                //    Qg (MVAr) = net reactive injection × baseMVA + load reactive.
-                foreach (int i in pvList.ToList())
+                if (EnforceLimits)
                 {
-                    double qgMvar = Q[i] * network.BaseMva + network.Buses[i].Qd;
-                    if (qgMvar > qMaxMvar[i])
-                    {
-                        Info(
-                            $">  Q-limit: bus {network.Buses[i].Id, 4} PV→PQ"
-                                + $"  Qg={qgMvar:F1} > Qmax={qMaxMvar[i]:F1} MVAr  [ceiling]"
-                        );
-                        Qsch[i] = (qMaxMvar[i] - network.Buses[i].Qd) / network.BaseMva;
-                        pvList.Remove(i);
-                        pqList.Add(i);
-                        switchedAtMax[i] = true;
-                        limitViolated = true;
-                    }
-                    else if (qgMvar < qMinMvar[i])
-                    {
-                        Info(
-                            $">  Q-limit: bus {network.Buses[i].Id, 4} PV→PQ"
-                                + $"  Qg={qgMvar:F1} < Qmin={qMinMvar[i]:F1} MVAr  [floor]"
-                        );
-                        Qsch[i] = (qMinMvar[i] - network.Buses[i].Qd) / network.BaseMva;
-                        pvList.Remove(i);
-                        pqList.Add(i);
-                        switchedAtMax[i] = false;
-                        limitViolated = true;
-                    }
+                    limitViolated = ApplyQLimitSwitches(
+                        network,
+                        Vm,
+                        Q,
+                        Qsch,
+                        pvList,
+                        pqList,
+                        switchedAtMax,
+                        vgSetpoint,
+                        qMaxMvar,
+                        qMinMvar
+                    );
+                    if (!limitViolated)
+                        Info($"  Q-limit: no violations → done");
                 }
-            }
-            if (EnforceLimits && !limitViolated)
-                Info($">  Q-limit: no violations → done");
-        } while (limitViolated && limitIter < MaxLimitIterations);
+            } while (limitViolated && limitIter < MaxLimitIterations);
+        }
 
         if (converged && limitViolated)
         {
@@ -217,12 +204,12 @@ public class NewtonRaphsonSolver
                 int busId = network.Buses[busIdx].Id;
                 if (atMax)
                     Warn(
-                        $">  unsatisfied Q-limit: bus {busId, 4}"
+                        $"  unsatisfied Q-limit: bus {busId, 4}"
                             + $"  Qg={qgMvar:F1} MVAr  limit=Qmax={qMaxMvar[busIdx]:F1} MVAr"
                     );
                 else
                     Warn(
-                        $">  unsatisfied Q-limit: bus {busId, 4}"
+                        $"  unsatisfied Q-limit: bus {busId, 4}"
                             + $"  Qg={qgMvar:F1} MVAr  limit=Qmin={qMinMvar[busIdx]:F1} MVAr"
                     );
             }
@@ -232,7 +219,7 @@ public class NewtonRaphsonSolver
             : "";
         if (converged)
             Info(
-                $"> result: converged"
+                $"result: converged"
                     + $"  {totalNrIters} NR iter{(totalNrIters != 1 ? "s" : "")}"
                     + $"{outerInfo}  mismatch {mismatch:e2} pu"
             );
@@ -384,6 +371,93 @@ public class NewtonRaphsonSolver
         return (qMaxMvar, qMinMvar, vgSetpoint);
     }
 
+    // ── Q-limit enforcement ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// One sweep of Q-limit enforcement after an inner-NR convergence:
+    /// (1) recover PQ→PV for previously-switched buses whose Vm has crossed back
+    ///     past the setpoint (Vm &gt; Vg for Qmax-switched, Vm &lt; Vg for Qmin),
+    ///     restoring the regulated voltage; and
+    /// (2) switch PV→PQ for any remaining PV bus whose computed Qg has crossed a
+    ///     reactive limit, pinning Qsch at the binding limit.
+    /// Mutates <paramref name="pvList"/>, <paramref name="pqList"/>,
+    /// <paramref name="Qsch"/>, <paramref name="Vm"/>, and
+    /// <paramref name="switchedAtMax"/> in place.
+    /// </summary>
+    /// <returns>
+    /// True if any bus was switched or recovered (caller should re-run the inner NR);
+    /// false if no Q-limits are binding and the outer loop can terminate.
+    /// </returns>
+    private bool ApplyQLimitSwitches(
+        PowerNetwork network,
+        double[] Vm,
+        double[] Q,
+        double[] Qsch,
+        List<int> pvList,
+        List<int> pqList,
+        Dictionary<int, bool> switchedAtMax,
+        double[] vgSetpoint,
+        double[] qMaxMvar,
+        double[] qMinMvar
+    )
+    {
+        bool changed = false;
+
+        // 1. PQ→PV recovery: a previously switched bus whose limit is no longer binding.
+        //    Qmax switch: limit not binding when Vm has risen above the setpoint.
+        //    Qmin switch: limit not binding when Vm has fallen below the setpoint.
+        foreach (int i in switchedAtMax.Keys.ToList())
+        {
+            double vg = vgSetpoint[i];
+            bool canRecover = switchedAtMax[i] ? Vm[i] > vg : Vm[i] < vg;
+            if (!canRecover)
+                continue;
+
+            string recLabel = switchedAtMax[i]
+                ? $"Vm={Vm[i]:F4} > Vg={vg:F4}  [max recovered]"
+                : $"Vm={Vm[i]:F4} < Vg={vg:F4}  [min recovered]";
+            Info($"  Q-limit: bus {network.Buses[i].Id, 4} PQ→PV  {recLabel}");
+            pqList.Remove(i);
+            pvList.Add(i);
+            Vm[i] = vg; // restore regulated voltage
+            switchedAtMax.Remove(i);
+            changed = true;
+        }
+
+        // 2. PV→PQ switching: check reactive limits on still-PV buses.
+        //    Qg (MVAr) = net reactive injection × baseMVA + load reactive.
+        foreach (int i in pvList.ToList())
+        {
+            double qgMvar = Q[i] * network.BaseMva + network.Buses[i].Qd;
+            if (qgMvar > qMaxMvar[i])
+            {
+                Info(
+                    $"  Q-limit: bus {network.Buses[i].Id, 4} PV→PQ"
+                        + $"  Qg={qgMvar:F1} > Qmax={qMaxMvar[i]:F1} MVAr  [ceiling]"
+                );
+                Qsch[i] = (qMaxMvar[i] - network.Buses[i].Qd) / network.BaseMva;
+                pvList.Remove(i);
+                pqList.Add(i);
+                switchedAtMax[i] = true;
+                changed = true;
+            }
+            else if (qgMvar < qMinMvar[i])
+            {
+                Info(
+                    $"  Q-limit: bus {network.Buses[i].Id, 4} PV→PQ"
+                        + $"  Qg={qgMvar:F1} < Qmin={qMinMvar[i]:F1} MVAr  [floor]"
+                );
+                Qsch[i] = (qMinMvar[i] - network.Buses[i].Qd) / network.BaseMva;
+                pvList.Remove(i);
+                pqList.Add(i);
+                switchedAtMax[i] = false;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
     // ── Numerical core ────────────────────────────────────────────────────────
 
     private static (double[] P, double[] Q) ComputeInjections(
@@ -513,55 +587,6 @@ public class NewtonRaphsonSolver
         return x;
     }
 
-    private static IReadOnlyList<BranchFlow> ComputeBranchFlows(
-        PowerNetwork network,
-        double[] Vm,
-        double[] Va
-    )
-    {
-        var flows = new List<BranchFlow>();
-
-        foreach (var br in network.Branches)
-        {
-            if (!br.IsInService)
-                continue;
-
-            int i = network.IndexOf(br.FromBus);
-            int j = network.IndexOf(br.ToBus);
-
-            var ys = Complex.One / new Complex(br.R, br.X);
-            var yc = new Complex(0.0, br.B / 2.0);
-
-            double phi = br.PhaseShift * Math.PI / 180.0;
-            var t = new Complex(br.TapRatio * Math.Cos(phi), br.TapRatio * Math.Sin(phi));
-            double tMagSq = br.TapRatio * br.TapRatio;
-
-            var Vi = Complex.FromPolarCoordinates(Vm[i], Va[i]);
-            var Vj = Complex.FromPolarCoordinates(Vm[j], Va[j]);
-
-            // Same π model as YBusBuilder
-            var Iij = ((ys + yc) / tMagSq) * Vi - (ys / Complex.Conjugate(t)) * Vj;
-            var Iji = -(ys / t) * Vi + (ys + yc) * Vj;
-
-            var Sij = Vi * Complex.Conjugate(Iij);
-            var Sji = Vj * Complex.Conjugate(Iji);
-
-            flows.Add(
-                new BranchFlow(
-                    br.FromBus,
-                    br.ToBus,
-                    Sij.Real,
-                    Sij.Imaginary,
-                    Sji.Real,
-                    Sji.Imaginary,
-                    rateA: br.RateA / network.BaseMva
-                )
-            );
-        }
-
-        return flows;
-    }
-
     private static PowerFlowResult MakeResult(
         PowerNetwork network,
         bool converged,
@@ -573,7 +598,7 @@ public class NewtonRaphsonSolver
         double[] qg
     )
     {
-        var flows = ComputeBranchFlows(network, Vm, Va);
+        var flows = BranchFlowCalculator.Compute(network, Vm, Va);
         var vaDeg = Va.Select(a => a * 180.0 / Math.PI).ToArray();
 
         // Voltage violations are only meaningful when the solver converged.

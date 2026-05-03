@@ -1,5 +1,12 @@
 namespace PowerFlow.Core.Models;
 
+/// <summary>
+/// A complete network snapshot: base MVA plus the buses, branches, and
+/// generators that define the system. Buses are sorted by ID on construction
+/// to give the solver a stable, parse-order-independent index mapping.
+/// Use <see cref="IndexOf"/> to map a bus ID to its 0-based array index;
+/// validate first with <see cref="NetworkValidator"/>.
+/// </summary>
 public class PowerNetwork
 {
     public double BaseMva { get; }

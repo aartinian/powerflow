@@ -4,6 +4,12 @@ using PowerFlow.Core.Models;
 
 namespace PowerFlow.Core.Parsing;
 
+/// <summary>
+/// Parses MATPOWER <c>case*.m</c> files into a <see cref="PowerNetwork"/>.
+/// Reads <c>mpc.baseMVA</c>, <c>mpc.bus</c>, <c>mpc.gen</c>, and <c>mpc.branch</c>
+/// blocks; ignores <c>mpc.gencost</c> and any custom fields. Assumes the
+/// standard MATPOWER column layout — non-standard cases may need a custom parser.
+/// </summary>
 public static class MatpowerParser
 {
     public static PowerNetwork ParseFile(string path) => Parse(File.ReadAllText(path));
