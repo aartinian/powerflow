@@ -38,6 +38,17 @@ public class NewtonRaphsonSolver
     public int MaxStepHalvings { get; init; } = 10;
 
     /// <summary>
+    /// When true the real-power imbalance is shared across all in-service generators
+    /// via an augmented Newton-Raphson system (one extra variable λ and one extra equation
+    /// for the reference-bus real-power balance). Participation factors α are proportional
+    /// to each generator's Pmax; the real-power injection at bus i shifts by α_i · λ (pu)
+    /// from the scheduled dispatch. λ is returned in
+    /// <see cref="PowerFlowResult.Lambda"/>.
+    /// Default false (conventional single slack-bus formulation).
+    /// </summary>
+    public bool DistributedSlack { get; init; } = false;
+
+    /// <summary>
     /// When true, the initial voltage state is overridden to a flat profile
     /// (Vm = 1.0 pu, Va = 0°) regardless of what the bus data specifies.
     /// Generator Vg setpoints are still applied at PV and slack buses, so the
@@ -85,6 +96,8 @@ public class NewtonRaphsonSolver
             throw new InvalidOperationException("Network has no slack bus.");
 
         var (Psch, Qsch) = BuildScheduledInjections(network);
+        var alpha = DistributedSlack ? BuildParticipationFactors(network) : Array.Empty<double>();
+        double lambda = 0.0;
         var (Vm, Va) = BuildInitialState(network, FlatStart);
         var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
 
@@ -106,6 +119,8 @@ public class NewtonRaphsonSolver
         Info($"NR solve started — {n} buses{isoNote}, {inServiceBranches} branches");
         if (EnforceLimits)
             Info($"Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
+        if (DistributedSlack)
+            Info($"Distributed slack ON  ({alpha.Count(a => a > 0)} participating bus(es))");
 
         bool limitViolated = false;
         int limitIter = 0;
@@ -134,7 +149,7 @@ public class NewtonRaphsonSolver
                 var pvpq = pvList.Concat(pqList).ToList();
                 int npvpq = pvpq.Count;
                 int npq = pqList.Count;
-                int jDim = npvpq + npq; // Jacobian dimension: angles for pvpq + voltages for pq
+                int jDim = npvpq + npq + (DistributedSlack ? 1 : 0); // [θ_pvpq | V_pq | λ]
 
                 converged = false;
 
@@ -142,12 +157,18 @@ public class NewtonRaphsonSolver
                 {
                     (P, Q) = ComputeInjections(ybus, Vm, Va);
 
-                    // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses]
+                    // Mismatch vector: [ΔP for pvpq buses | ΔQ for pq buses | ΔP for slack bus]
+                    // With distributed slack each ΔP_k carries the participation term α_k·λ.
                     var f = new double[jDim];
                     for (int k = 0; k < npvpq; k++)
-                        f[k] = Psch[pvpq[k]] - P[pvpq[k]];
+                        f[k] =
+                            Psch[pvpq[k]]
+                            + (DistributedSlack ? alpha[pvpq[k]] * lambda : 0.0)
+                            - P[pvpq[k]];
                     for (int k = 0; k < npq; k++)
                         f[npvpq + k] = Qsch[pqList[k]] - Q[pqList[k]];
+                    if (DistributedSlack)
+                        f[jDim - 1] = Psch[slackIdx] + alpha[slackIdx] * lambda - P[slackIdx];
 
                     mismatch = f.Max(v => Math.Abs(v));
                     Info(
@@ -162,14 +183,36 @@ public class NewtonRaphsonSolver
                         break;
                     }
 
-                    var J = BuildJacobian(ybus, Vm, Va, P, Q, pvpq, pqList);
+                    var J = BuildJacobian(
+                        ybus,
+                        Vm,
+                        Va,
+                        P,
+                        Q,
+                        pvpq,
+                        pqList,
+                        DistributedSlack ? slackIdx : -1,
+                        DistributedSlack ? alpha : null
+                    );
                     var dx = SolveLinear(J, f);
 
                     // Backtracking line search: find the largest μ = 2^{−k} that
                     // reduces ‖f‖∞. For well-conditioned networks μ = 1 on the first
                     // try; the search adds negligible overhead in the common case.
                     double mu = FindStepSize(
-                        ybus, Vm, Va, Psch, Qsch, pvpq, pqList, dx, mismatch, npvpq
+                        ybus,
+                        Vm,
+                        Va,
+                        Psch,
+                        Qsch,
+                        pvpq,
+                        pqList,
+                        dx,
+                        mismatch,
+                        npvpq,
+                        lambda,
+                        DistributedSlack ? alpha : null,
+                        slackIdx
                     );
                     if (mu < 1.0)
                         Info($"    step limited: μ = {mu:F4}");
@@ -181,6 +224,8 @@ public class NewtonRaphsonSolver
                         Va[pvpq[k]] += mu * dx[k];
                     for (int k = 0; k < npq; k++)
                         Vm[pqList[k]] *= 1.0 + mu * dx[npvpq + k];
+                    if (DistributedSlack)
+                        lambda += mu * dx[jDim - 1];
                 }
 
                 if (!converged)
@@ -239,11 +284,15 @@ public class NewtonRaphsonSolver
             ? $"  {limitIter} outer iter{(limitIter != 1 ? "s" : "")}"
             : "";
         if (converged)
+        {
             Info(
                 $"result: converged"
                     + $"  {totalNrIters} NR iter{(totalNrIters != 1 ? "s" : "")}"
                     + $"{outerInfo}  mismatch {mismatch:e2} pu"
             );
+            if (DistributedSlack)
+                Info($"  distributed slack λ = {lambda:F6} pu");
+        }
         else
             Warn($"result: NOT converged  mismatch {mismatch:e2} pu");
 
@@ -261,7 +310,7 @@ public class NewtonRaphsonSolver
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
 
-        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg);
+        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg, lambda);
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -396,6 +445,29 @@ public class NewtonRaphsonSolver
         return (qMaxMvar, qMinMvar, vgSetpoint);
     }
 
+    /// <summary>
+    /// Builds the normalised participation-factor vector α (one entry per bus, indexed
+    /// by network.Buses order). α_i is proportional to the sum of Pmax across all
+    /// in-service generators at bus i; buses with no eligible generator receive α_i = 0.
+    /// When no generator has Pmax &gt; 0 (degenerate case), α falls back to a uniform
+    /// 1/n distribution so the augmented Jacobian remains non-singular.
+    /// </summary>
+    private static double[] BuildParticipationFactors(PowerNetwork network)
+    {
+        int n = network.Buses.Count;
+        var alpha = new double[n];
+        foreach (var gen in network.Generators.Where(g => g.IsInService && g.Pmax > 0))
+            alpha[network.IndexOf(gen.BusId)] += gen.Pmax;
+        double total = alpha.Sum();
+        if (total > 0)
+            for (int i = 0; i < n; i++)
+                alpha[i] /= total;
+        else
+            for (int i = 0; i < n; i++)
+                alpha[i] = 1.0 / n;
+        return alpha;
+    }
+
     // ── Q-limit enforcement ───────────────────────────────────────────────────
 
     /// <summary>
@@ -503,20 +575,26 @@ public class NewtonRaphsonSolver
         List<int> pqList,
         double[] dx,
         double currentMismatch,
-        int npvpq
+        int npvpq,
+        double lambda = 0,
+        double[]? alpha = null,
+        int slackIdx = -1
     )
     {
         if (MaxStepHalvings == 0)
             return 1.0;
 
+        bool distSlack = alpha is not null && slackIdx >= 0;
         int n = Vm.Length;
         int npq = pqList.Count;
+        int dxDim = npvpq + npq + (distSlack ? 1 : 0);
         var VmTry = new double[n];
         var VaTry = new double[n];
 
         for (int h = 0; h <= MaxStepHalvings; h++)
         {
             double mu = Math.Pow(0.5, h); // 1, ½, ¼, …, 2^{−MaxStepHalvings}
+            double lambdaTry = distSlack ? lambda + mu * dx[dxDim - 1] : 0;
 
             Array.Copy(Vm, VmTry, n);
             Array.Copy(Va, VaTry, n);
@@ -528,10 +606,18 @@ public class NewtonRaphsonSolver
             var (Ptry, Qtry) = ComputeInjections(ybus, VmTry, VaTry);
 
             double tryMismatch = 0.0;
-            foreach (int i in pvpq)
-                tryMismatch = Math.Max(tryMismatch, Math.Abs(Psch[i] - Ptry[i]));
+            for (int k = 0; k < pvpq.Count; k++)
+            {
+                double pRef = Psch[pvpq[k]] + (distSlack ? alpha![pvpq[k]] * lambdaTry : 0.0);
+                tryMismatch = Math.Max(tryMismatch, Math.Abs(pRef - Ptry[pvpq[k]]));
+            }
             foreach (int i in pqList)
                 tryMismatch = Math.Max(tryMismatch, Math.Abs(Qsch[i] - Qtry[i]));
+            if (distSlack)
+            {
+                double pSlack = Psch[slackIdx] + alpha![slackIdx] * lambdaTry;
+                tryMismatch = Math.Max(tryMismatch, Math.Abs(pSlack - Ptry[slackIdx]));
+            }
 
             if (tryMismatch < currentMismatch)
                 return mu;
@@ -578,7 +664,9 @@ public class NewtonRaphsonSolver
         double[] P,
         double[] Q,
         List<int> pvpq,
-        List<int> pq
+        List<int> pq,
+        int slackIdx = -1, // ≥ 0 to enable distributed-slack augmentation
+        double[]? alpha = null
     )
     {
         int npvpq = pvpq.Count;
@@ -595,9 +683,18 @@ public class NewtonRaphsonSolver
         for (int k = 0; k < npq; k++)
             pqPos[pq[k]] = k;
 
+        bool distSlack = slackIdx >= 0 && alpha is not null;
+        int dim = distSlack ? m + 1 : m;
         // Capacity: each Ybus off-diagonal non-zero produces ≤4 J entries; diagonals add m+npq.
-        int capacity = ybus.OffDiag.Sum(r => r.Length) * 4 + m + npq * 2;
-        var triplets = new CoordinateStorage<double>(m, m, capacity);
+        // Distributed slack adds the λ column (npvpq entries), reference-bus row
+        // (≤2·deg(slack) off-diagonal entries), and one corner entry.
+        int slackDeg = distSlack ? ybus.OffDiag[slackIdx].Length : 0;
+        int capacity =
+            ybus.OffDiag.Sum(r => r.Length) * 4
+            + m
+            + npq * 2
+            + (distSlack ? npvpq + 2 * slackDeg + 1 : 0);
+        var triplets = new CoordinateStorage<double>(dim, dim, capacity);
 
         // Off-diagonal: iterate Ybus non-zeros, emit up to 4 Jacobian entries per (i,j) pair.
         for (int i = 0; i < ybus.N; i++)
@@ -657,6 +754,41 @@ public class NewtonRaphsonSolver
             triplets.At(npvpq + k, npvpq + k, Q[i] - ybus.Bd[i] * Vi2); // L_ii
         }
 
+        // Distributed slack: augment with a λ column and a reference-bus P row.
+        if (distSlack)
+        {
+            // λ column (col m): J_pf[k,m] = −∂f_k/∂λ = −α[pvpq[k]].
+            // (∂f_k/∂λ = +α because f_k = Psch_k + α_k·λ − P_k, so J_pf = −∂f/∂x uses −α.)
+            for (int k = 0; k < npvpq; k++)
+                triplets.At(k, m, -alpha![pvpq[k]]);
+
+            // Reference-bus P row (row m): off-diagonal H and N entries.
+            // ∂P_slack/∂θ_j = V_s·V_j·(G_sj·sin θ_sj − B_sj·cos θ_sj)
+            // V_j·∂P_slack/∂V_j = V_s·V_j·(G_sj·cos θ_sj + B_sj·sin θ_sj)
+            foreach (var (j, Gsj, Bsj) in ybus.OffDiag[slackIdx])
+            {
+                int tc = pvpqPos[j]; // θ column index
+                int vc = pqPos[j]; // V column index
+                if (tc < 0 && vc < 0)
+                    continue; // j has no free variable (should not occur)
+
+                double thetaSJ = Va[slackIdx] - Va[j];
+                double VVsj = Vm[slackIdx] * Vm[j];
+                double csj = Math.Cos(thetaSJ);
+                double snj = Math.Sin(thetaSJ);
+                double h = VVsj * (Gsj * snj - Bsj * csj); // ∂P_slack/∂θ_j
+                double nv = VVsj * (Gsj * csj + Bsj * snj); // V_j · ∂P_slack/∂V_j
+
+                if (tc >= 0)
+                    triplets.At(m, tc, h);
+                if (vc >= 0)
+                    triplets.At(m, npvpq + vc, nv);
+            }
+
+            // Corner (m, m): J_pf[m,m] = −∂f_m/∂λ = −α[slackIdx].
+            triplets.At(m, m, -alpha![slackIdx]);
+        }
+
         // sumDuplicates=true handles parallel branches.
         return CompressedColumnStorage<double>.OfIndexed(triplets, true);
     }
@@ -676,7 +808,8 @@ public class NewtonRaphsonSolver
         double[] Va,
         double mismatch,
         double[] pg,
-        double[] qg
+        double[] qg,
+        double lambda = 0
     )
     {
         var flows = BranchFlowCalculator.Compute(network, Vm, Va);
@@ -707,7 +840,8 @@ public class NewtonRaphsonSolver
             pg,
             qg,
             flows,
-            violations
+            violations,
+            lambda
         );
     }
 }
