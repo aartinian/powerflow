@@ -1,3 +1,4 @@
+using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
 
@@ -32,8 +33,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_Converges()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(
             result.Converged,
@@ -48,8 +49,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_SlackBusPg()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // MATPOWER reference: slack bus (bus 1) generates 232.4 MW = 2.324 pu
         Assert.Equal(2.324, result.Pg[0], 2); // ±0.005 pu
@@ -58,8 +59,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_PVBusQg()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // MATPOWER runpf result: bus 2 Qg = 43.56 MVAr = 0.4356 pu
         // (The 42.4 MVAr stored in case14.m gen data is the initial dispatch, not the PF solution.)
@@ -97,8 +98,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_BranchFlowCount()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(20, result.BranchFlows.Count); // all 20 case14 branches are in-service
     }
@@ -106,8 +107,8 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_NoNegativeLosses()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         // Real losses P_ij + P_ji = R·|I|² ≥ 0 for every branch.
         foreach (var bf in result.BranchFlows)
@@ -126,8 +127,8 @@ public class SolverValidationTests
     [InlineData(13)] // PQ, tip bus
     public void Solve_Case14_FlatStart_VoltageMagnitude(int busIdx)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(Case14Reference[busIdx].Vm, result.Vm[busIdx], 3); // +/-0.0005 pu
     }
@@ -141,8 +142,8 @@ public class SolverValidationTests
     [InlineData(13)] // PQ, tip bus
     public void Solve_Case14_FlatStart_VoltageAngle(int busIdx)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(Case14Reference[busIdx].Va, result.Va[busIdx], 2); // +/-0.005 degrees
     }
@@ -152,9 +153,9 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_LoadingPct_UnconstrainedIsNaN()
     {
-        // case14_flatstart.m has rateA=0 for all branches — loading % is undefined.
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        // case14.m has rateA=0 for all branches — loading % is undefined.
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.All(result.BranchFlows, bf => Assert.True(double.IsNaN(bf.LoadingPct)));
     }
@@ -177,11 +178,11 @@ public class SolverValidationTests
     [Fact]
     public void Solve_Case14_FlatStart_DetectsOvervoltageOnPVBuses()
     {
-        // case14_flatstart.m has Vmax=1.06 for all buses.
+        // case14.m has Vmax=1.06 for all buses.
         // Generator setpoints for buses 6 (Vg=1.07) and 8 (Vg=1.09) exceed that limit;
         // bus 7 (PQ, transformer-connected to bus 8) is pulled above 1.06 as well.
-        var net = MatpowerParser.ParseFile(TestData.Path("case14_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(3, result.VoltageViolations.Count);
         Assert.All(result.VoltageViolations, v => Assert.True(v.IsOverVoltage));
@@ -198,5 +199,151 @@ public class SolverValidationTests
         var result = new NewtonRaphsonSolver().Solve(net);
 
         Assert.Empty(result.VoltageViolations);
+    }
+
+    // ─── Out-of-service branches ─────────────────────────────────────────────
+
+    [Fact]
+    public void Solve_OutOfServiceBranch_BranchFlowsCountMatchesInServiceCount()
+    {
+        // case_test.m: 3 branches, branch 2→3 is out of service → expect 2 flow entries.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_test.m"));
+        var inServiceCount = net.Branches.Count(b => b.IsInService);
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.Equal(inServiceCount, result.BranchFlows.Count);
+    }
+
+    [Fact]
+    public void Solve_OutOfServiceBranch_OutOfServiceBranchNotInFlows()
+    {
+        // The out-of-service branch 2→3 must not appear in BranchFlows.
+        var net = MatpowerParser.ParseFile(TestData.Path("case_test.m"));
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.DoesNotContain(result.BranchFlows, bf => bf.FromBusId == 2 && bf.ToBusId == 3);
+    }
+
+    // ─── Phase-shifting transformer ──────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a minimal 2-bus network: slack → PQ load, connected by a single branch.
+    /// </summary>
+    private static PowerNetwork TwoBusNetwork(double phaseShiftDeg)
+    {
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 100, 50, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var branch = new Branch(
+            fromBus: 1,
+            toBus: 2,
+            r: 0.02,
+            x: 0.10,
+            b: 0,
+            tapRatio: 1.0,
+            phaseShift: phaseShiftDeg,
+            rateA: 0,
+            isInService: true
+        );
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        return new PowerNetwork(100, [slack, load], [branch], [gen]);
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_Converges()
+    {
+        var net = TwoBusNetwork(phaseShiftDeg: 10.0);
+        var result = new NewtonRaphsonSolver().Solve(net);
+
+        Assert.True(result.Converged, $"Did not converge — mismatch: {result.MaxMismatch:e3} pu");
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_AltersReactiveFlow()
+    {
+        // A non-zero phase shift must produce measurably different branch reactive flows
+        // compared to the same network with zero phase shift.
+        var base0 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 0));
+        var phase5 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 5.0));
+
+        Assert.True(base0.Converged);
+        Assert.True(phase5.Converged);
+        Assert.NotEqual(base0.BranchFlows[0].Qij, phase5.BranchFlows[0].Qij);
+    }
+
+    [Fact]
+    public void Solve_PhaseShiftingTransformer_AltersRealFlow()
+    {
+        // Real power on the branch also changes with phase shift.
+        var base0 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 0));
+        var phase5 = new NewtonRaphsonSolver().Solve(TwoBusNetwork(phaseShiftDeg: 5.0));
+
+        Assert.True(base0.Converged);
+        Assert.True(phase5.Converged);
+        Assert.NotEqual(base0.BranchFlows[0].Pij, phase5.BranchFlows[0].Pij);
+    }
+
+    // ─── Isolated buses ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Two-bus active network (slack + PQ) plus one isolated bus that carries
+    /// load data. The isolated bus must be invisible to the solver and to all
+    /// result fields.
+    /// </summary>
+    private static PowerNetwork NetworkWithIsolatedBus()
+    {
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 50, 20, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        // Bus 3 is isolated: has load data that must NOT appear as generation in results,
+        // and Vm = 0.5 pu which is outside its own [0.4, 0.8] limits only as a
+        // canary — violations for isolated buses must not be reported.
+        var iso = new Bus(3, BusType.Isolated, 30, 10, 0, 0, 0.5, 0, 100, vmax: 0.8, vmin: 0.4);
+        var branch = new Branch(1, 2, 0.02, 0.10, 0, 1.0, 0, 0, true);
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        return new PowerNetwork(100, [slack, load, iso], [branch], [gen]);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_Converges()
+    {
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_ZeroPgQg()
+    {
+        // Load data on an isolated bus must not appear as spurious generation.
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.Equal(0.0, result.Pg[2]);
+        Assert.Equal(0.0, result.Qg[2]);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_NotInVoltageViolations()
+    {
+        // Vm on an isolated bus is not computed by the solver — do not report violations.
+        var result = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.DoesNotContain(result.VoltageViolations, v => v.BusId == 3);
+    }
+
+    [Fact]
+    public void Solve_IsolatedBus_DoesNotAffectActiveSolution()
+    {
+        // Adding an isolated bus must not change Vm/Va on the active buses.
+        var slack = new Bus(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var load = new Bus(2, BusType.PQ, 50, 20, 0, 0, 1.0, 0, 100, 1.1, 0.9);
+        var branch = new Branch(1, 2, 0.02, 0.10, 0, 1.0, 0, 0, true);
+        var gen = new Generator(1, 200, 0, 300, -300, 1.0, 500, 0, true);
+        var netBase = new PowerNetwork(100, [slack, load], [branch], [gen]);
+
+        var r1 = new NewtonRaphsonSolver().Solve(netBase);
+        var r2 = new NewtonRaphsonSolver().Solve(NetworkWithIsolatedBus());
+
+        Assert.Equal(r1.Vm[0], r2.Vm[0], 10);
+        Assert.Equal(r1.Vm[1], r2.Vm[1], 10);
+        Assert.Equal(r1.Va[1], r2.Va[1], 10);
     }
 }

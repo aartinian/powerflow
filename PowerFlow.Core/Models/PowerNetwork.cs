@@ -1,5 +1,12 @@
 namespace PowerFlow.Core.Models;
 
+/// <summary>
+/// A complete network snapshot: base MVA plus the buses, branches, and
+/// generators that define the system. Buses are sorted by ID on construction
+/// to give the solver a stable, parse-order-independent index mapping.
+/// Use <see cref="IndexOf"/> to map a bus ID to its 0-based array index;
+/// validate first with <see cref="NetworkValidator"/>.
+/// </summary>
 public class PowerNetwork
 {
     public double BaseMva { get; }
@@ -26,5 +33,11 @@ public class PowerNetwork
         _busIndex = Buses.Select((b, i) => (b.Id, i)).ToDictionary(x => x.Id, x => x.i);
     }
 
-    public int IndexOf(int busId) => _busIndex[busId];
+    public int IndexOf(int busId) =>
+        _busIndex.TryGetValue(busId, out var idx)
+            ? idx
+            : throw new InvalidOperationException(
+                $"Bus {busId} is not in the network. "
+                    + "Validate the network with NetworkValidator before solving."
+            );
 }

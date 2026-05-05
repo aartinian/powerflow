@@ -1,5 +1,11 @@
 namespace PowerFlow.Core.Models;
 
+/// <summary>
+/// Immutable dispatch and capability data for one generator: real-power
+/// schedule, reactive limits, voltage setpoint, and active-power capacity.
+/// Multiple generators may share a bus; the solver aggregates their
+/// contributions per bus.
+/// </summary>
 public class Generator
 {
     public int BusId { get; }

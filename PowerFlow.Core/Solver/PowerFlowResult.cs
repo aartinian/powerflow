@@ -1,5 +1,12 @@
 namespace PowerFlow.Core.Solver;
 
+/// <summary>
+/// The output of <see cref="NewtonRaphsonSolver.Solve"/>. Holds the solved
+/// bus state (Vm/Va), per-bus net generation (Pg/Qg), per-branch flows, and
+/// any voltage-limit violations. When <see cref="Converged"/> is false the
+/// numeric arrays still reflect the last NR iteration but are not a valid
+/// solution; <see cref="VoltageViolations"/> is empty in that case.
+/// </summary>
 public class PowerFlowResult
 {
     public bool Converged { get; }
@@ -17,6 +24,14 @@ public class PowerFlowResult
     /// </summary>
     public IReadOnlyList<VoltageViolation> VoltageViolations { get; }
 
+    /// <summary>
+    /// Generation imbalance scalar λ in pu (distributed slack only).
+    /// The real power at each participating bus i shifts by α_i · λ · BaseMVA MW
+    /// from the scheduled dispatch. Always 0 when
+    /// <see cref="NewtonRaphsonSolver.DistributedSlack"/> is false.
+    /// </summary>
+    public double Lambda { get; }
+
     public PowerFlowResult(
         bool converged,
         int iterations,
@@ -26,7 +41,8 @@ public class PowerFlowResult
         double[] pg,
         double[] qg,
         IReadOnlyList<BranchFlow> branchFlows,
-        IReadOnlyList<VoltageViolation> voltageViolations
+        IReadOnlyList<VoltageViolation> voltageViolations,
+        double lambda = 0
     )
     {
         Converged = converged;
@@ -38,5 +54,6 @@ public class PowerFlowResult
         Qg = qg;
         BranchFlows = branchFlows;
         VoltageViolations = voltageViolations;
+        Lambda = lambda;
     }
 }

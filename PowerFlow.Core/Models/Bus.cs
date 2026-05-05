@@ -1,6 +1,11 @@
 namespace PowerFlow.Core.Models;
 
-// Immutable network data only. The solver owns mutable voltage state in its own Vm[]/Va[] arrays.
+/// <summary>
+/// Immutable network data for one bus: type, load, shunt admittance, voltage
+/// limits, and an initial Vm/Va that the solver may use as a warm start.
+/// The solver owns the mutable voltage state in its own Vm[]/Va[] arrays —
+/// this class is pure input data.
+/// </summary>
 public class Bus
 {
     public int Id { get; }

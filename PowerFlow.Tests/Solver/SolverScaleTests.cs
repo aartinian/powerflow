@@ -31,8 +31,8 @@ public class SolverScaleTests
     [Fact]
     public void Solve_Case57_FlatStart_Converges()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case57_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case57.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
         Assert.True(
@@ -48,8 +48,8 @@ public class SolverScaleTests
     [InlineData(56, 0.965)] // bus 57 — PQ (tip bus)
     public void Solve_Case57_FlatStart_VoltageMagnitude(int busIdx, double vmRef)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case57_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case57.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu (reference values stored to 3 dp)
     }
@@ -60,8 +60,8 @@ public class SolverScaleTests
     [InlineData(56, -16.56)] // bus 57
     public void Solve_Case57_FlatStart_VoltageAngle(int busIdx, double vaRef)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case57_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case57.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(vaRef, result.Va[busIdx], 1); // ±0.05°
     }
@@ -71,8 +71,8 @@ public class SolverScaleTests
     [Fact]
     public void Solve_Case118_FlatStart_Converges()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case118_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case118.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
         Assert.True(
@@ -88,8 +88,8 @@ public class SolverScaleTests
     [InlineData(117, 0.949)] // bus 118 — PQ (tip bus)
     public void Solve_Case118_FlatStart_VoltageMagnitude(int busIdx, double vmRef)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case118_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case118.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu (reference values stored to 3 dp)
     }
@@ -99,8 +99,8 @@ public class SolverScaleTests
     [Fact]
     public void Solve_Case300_FlatStart_Converges()
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case300_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case300.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged, $"Did not converge — {result.MaxMismatch:e3} pu");
         Assert.True(
@@ -115,8 +115,8 @@ public class SolverScaleTests
     [InlineData(299, 1.0402)] // bus 9533 — PQ (last bus)
     public void Solve_Case300_FlatStart_VoltageMagnitude(int busIdx, double vmRef)
     {
-        var net = MatpowerParser.ParseFile(TestData.Path("case300_flatstart.m"));
-        var result = new NewtonRaphsonSolver().Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case300.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu
     }
