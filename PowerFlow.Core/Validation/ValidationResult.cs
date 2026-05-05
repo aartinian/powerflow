@@ -1,10 +1,10 @@
-namespace PowerFlow.Core.Models;
+namespace PowerFlow.Core.Validation;
 
 /// <summary>
 /// The outcome of <see cref="NetworkValidator.Validate"/>.
 /// <see cref="IsValid"/> is <c>false</c> only when at least one
 /// <see cref="ValidationSeverity.Error"/> entry is present; warnings alone do not
-/// make a result invalid.  Call <see cref="ThrowIfInvalid"/> for a fire-and-forget usage.
+/// make a result invalid. Call <see cref="ThrowIfInvalid"/> for a fire-and-forget usage.
 /// </summary>
 public sealed class ValidationResult
 {

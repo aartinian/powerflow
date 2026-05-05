@@ -1,4 +1,4 @@
-namespace PowerFlow.Core.Models;
+namespace PowerFlow.Core.Validation;
 
 public enum ValidationSeverity
 {
@@ -19,8 +19,8 @@ public sealed class ValidationError
         ValidationSeverity severity = ValidationSeverity.Error
     )
     {
-        Code = code;
-        Message = message;
+        Code     = code;
+        Message  = message;
         Severity = severity;
     }
 }

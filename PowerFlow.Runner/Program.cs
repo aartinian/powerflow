@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
 using PowerFlow.Core.Solver;
+using PowerFlow.Core.Validation;
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 

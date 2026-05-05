@@ -1,5 +1,6 @@
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
+using PowerFlow.Core.Validation;
 
 namespace PowerFlow.Tests.Network;
 

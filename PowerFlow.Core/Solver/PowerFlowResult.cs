@@ -11,9 +11,10 @@ namespace PowerFlow.Core.Solver;
 /// </summary>
 public class PowerFlowResult
 {
-    public bool Converged   { get; }
-    public int Iterations   { get; } // number of NR iterations taken
-    public double MaxMismatch { get; } // pu, mismatch at the last NR iteration
+    public bool Converged      { get; }
+    public int Iterations      { get; } // cumulative NR iterations across all outer Q-limit loops
+    public int OuterIterations { get; } // Q-limit outer loop count (0 when limits are off)
+    public double MaxMismatch  { get; } // pu, mismatch at the last NR iteration
     public double[] Vm { get; }  // pu, indexed by network.Buses order
     public double[] Va { get; }  // degrees, indexed by network.Buses order
     public double[] Pg { get; }  // pu, net real generation at each bus (0 for load-only buses)
@@ -53,6 +54,7 @@ public class PowerFlowResult
     public PowerFlowResult(
         bool converged,
         int iterations,
+        int outerIterations,
         double maxMismatch,
         double[] vm,
         double[] va,
@@ -68,6 +70,7 @@ public class PowerFlowResult
     {
         Converged         = converged;
         Iterations        = iterations;
+        OuterIterations   = outerIterations;
         MaxMismatch       = maxMismatch;
         Vm                = vm;
         Va                = va;

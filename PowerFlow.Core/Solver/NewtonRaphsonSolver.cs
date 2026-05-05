@@ -49,6 +49,17 @@ public class NewtonRaphsonSolver
     public bool DistributedSlack { get; init; } = false;
 
     /// <summary>
+    /// When true, a linearised DC power flow is run before the first AC Newton-Raphson
+    /// iteration and its solved angles seed the initial Va vector. Vm comes from the
+    /// bus data or the flat-start profile as usual. Useful for cases that struggle to
+    /// converge from a cold (flat) start because the DC angles are a much better
+    /// initial guess than Va = 0° everywhere.
+    /// Incompatible with <see cref="FlatStart"/> being the sole initialisation strategy
+    /// — both options may be set simultaneously; Vm will be flat while Va comes from DC.
+    /// </summary>
+    public bool WarmStartFromDc { get; init; } = false;
+
+    /// <summary>
     /// When true, the initial voltage state is overridden to a flat profile
     /// (Vm = 1.0 pu, Va = 0°) regardless of what the bus data specifies.
     /// Generator Vg setpoints are still applied at PV and slack buses, so the
@@ -86,9 +97,22 @@ public class NewtonRaphsonSolver
     /// <see cref="PowerFlowResult.Converged"/> to know whether the solution
     /// is trustworthy.
     /// </remarks>
+    /// <summary>
+    /// Convenience overload: builds the Y-bus from the network, then solves.
+    /// Use <see cref="Solve(PowerNetwork, SparseYbus)"/> directly when the topology is
+    /// fixed across multiple solves (sensitivity sweeps, parameter studies) to avoid
+    /// rebuilding the admittance matrix each time.
+    /// </summary>
     public PowerFlowResult Solve(PowerNetwork network)
+        => Solve(network, YBusBuilder.Build(network));
+
+    /// <summary>
+    /// Solve the AC power flow using a caller-supplied <paramref name="ybus"/>.
+    /// The Y-bus must have been built from <paramref name="network"/> by
+    /// <see cref="Network.YBusBuilder"/>; no consistency check is performed.
+    /// </summary>
+    public PowerFlowResult Solve(PowerNetwork network, SparseYbus ybus)
     {
-        var ybus = YBusBuilder.Build(network);
         int n = ybus.N;
 
         var (slackIdx, pvList, pqList) = ClassifyBuses(network);
@@ -101,6 +125,14 @@ public class NewtonRaphsonSolver
         var (Vm, Va) = BuildInitialState(network, FlatStart);
         var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
 
+        if (WarmStartFromDc)
+        {
+            var dc = new DcPowerFlowSolver().Solve(network);
+            for (int i = 0; i < n; i++)
+                Va[i] = dc.Va[i] * Math.PI / 180.0; // degrees → radians
+            Info("DC warm-start: Va seeded from DC solution");
+        }
+
         // Tracks buses that were switched PV→PQ and the reason:
         //   true  = switched because Qg hit Qmax
         //   false = switched because Qg hit Qmin
@@ -110,7 +142,6 @@ public class NewtonRaphsonSolver
         double[] Q = new double[n];
         double mismatch = double.MaxValue;
         bool converged = false;
-        int iterations = MaxIterations;
         int totalNrIters = 0;
 
         int inServiceBranches = network.Branches.Count(b => b.IsInService);
@@ -132,7 +163,6 @@ public class NewtonRaphsonSolver
             Info($"single slack-bus network — trivially solved");
             (P, Q) = ComputeInjections(ybus, Vm, Va);
             converged = true;
-            iterations = 0;
             mismatch = 0.0;
         }
         else
@@ -178,7 +208,6 @@ public class NewtonRaphsonSolver
                     if (mismatch < Tolerance)
                     {
                         converged = true;
-                        iterations = iter;
                         totalNrIters += iter + 1;
                         break;
                     }
@@ -310,8 +339,8 @@ public class NewtonRaphsonSolver
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
 
-        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg, lambda,
-            switchedAtMax, DistributedSlack ? alpha : null);
+        return MakeResult(network, converged, totalNrIters, limitIter, Vm, Va, mismatch, pg, qg,
+            lambda, switchedAtMax, DistributedSlack ? alpha : null);
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -804,7 +833,8 @@ public class NewtonRaphsonSolver
     private static PowerFlowResult MakeResult(
         PowerNetwork network,
         bool converged,
-        int iter,
+        int totalNrIters,
+        int outerIters,
         double[] Vm,
         double[] Va,
         double mismatch,
@@ -840,12 +870,13 @@ public class NewtonRaphsonSolver
 
         return new PowerFlowResult(
             converged,
-            iter,
+            totalNrIters,
+            outerIters,
             mismatch,
             (double[])Vm.Clone(),
             vaDeg,
-            pg,
-            qg,
+            (double[])pg.Clone(),
+            (double[])qg.Clone(),
             flows,
             violations,
             lambda,
