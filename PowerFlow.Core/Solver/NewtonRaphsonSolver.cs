@@ -310,7 +310,8 @@ public class NewtonRaphsonSolver
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
 
-        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg, lambda);
+        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg, lambda,
+            switchedAtMax, DistributedSlack ? alpha : null);
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -809,7 +810,9 @@ public class NewtonRaphsonSolver
         double mismatch,
         double[] pg,
         double[] qg,
-        double lambda = 0
+        double lambda,
+        Dictionary<int, bool>? switchedAtMax,
+        double[]? alpha
     )
     {
         var flows = BranchFlowCalculator.Compute(network, Vm, Va);
@@ -827,9 +830,13 @@ public class NewtonRaphsonSolver
                 if (bus.Type == BusType.Isolated)
                     continue;
                 if (Vm[i] < bus.Vmin || Vm[i] > bus.Vmax)
-                    violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax));
+                    violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax, bus.BaseKv));
             }
         }
+
+        var balance      = converged ? BuildSystemBalance(network, pg, qg, Vm, flows) : null;
+        var generators   = BuildGeneratorResults(network, qg, lambda, alpha, switchedAtMax);
+        var qLimitBound  = BuildQLimitBound(network, switchedAtMax);
 
         return new PowerFlowResult(
             converged,
@@ -841,7 +848,112 @@ public class NewtonRaphsonSolver
             qg,
             flows,
             violations,
-            lambda
+            lambda,
+            balance,
+            generators,
+            qLimitBound
+        );
+    }
+
+    // ── Result helpers ────────────────────────────────────────────────────────
+
+    private static SystemBalance BuildSystemBalance(
+        PowerNetwork network,
+        double[] pg,
+        double[] qg,
+        double[] Vm,
+        IReadOnlyList<BranchFlow> flows)
+    {
+        double baseMva = network.BaseMva;
+
+        double totalPgMw     = pg.Sum() * baseMva;
+        double totalPdMw     = network.Buses.Sum(b => b.Pd);
+        double totalLossesMw = flows.Sum(f => (f.Pij + f.Pji) * baseMva);
+        double lossPct       = totalPdMw > 0 ? totalLossesMw / totalPdMw * 100.0 : 0.0;
+
+        double totalQgMvar     = qg.Sum() * baseMva;
+        double totalQdMvar     = network.Buses.Sum(b => b.Qd);
+        double totalShuntMvar  = 0.0;
+        for (int i = 0; i < network.Buses.Count; i++)
+            totalShuntMvar += network.Buses[i].Bs * Vm[i] * Vm[i];
+        double totalLossesMvar = flows.Sum(f => (f.Qij + f.Qji) * baseMva);
+
+        return new SystemBalance(
+            totalPgMw, totalPdMw, totalLossesMw, lossPct,
+            totalQgMvar, totalQdMvar, totalShuntMvar, totalLossesMvar
+        );
+    }
+
+    /// <summary>
+    /// Builds one <see cref="GeneratorResult"/> per in-service generator.
+    /// Pg includes the distributed-slack correction allocated proportionally to Pmax
+    /// (equal split when all generators at the bus have Pmax = 0).
+    /// Qg is the bus-level reactive divided equally among generators at the same bus.
+    /// </summary>
+    private static IReadOnlyList<GeneratorResult> BuildGeneratorResults(
+        PowerNetwork network,
+        double[] qg,
+        double lambda,
+        double[]? alpha,
+        Dictionary<int, bool>? switchedAtMax)
+    {
+        double baseMva = network.BaseMva;
+        var results = new List<GeneratorResult>();
+
+        // Group in-service generators by bus array index.
+        var byBus = network.Generators
+            .Where(g => g.IsInService)
+            .GroupBy(g => network.IndexOf(g.BusId))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var (busIdx, gens) in byBus)
+        {
+            double qgBusMvar = qg[busIdx] * baseMva;
+            double qShare    = qgBusMvar / gens.Count;
+
+            // Bus-level distributed-slack correction (0 when not using distributed slack).
+            double deltaPBus = alpha is not null ? alpha[busIdx] * lambda * baseMva : 0.0;
+
+            // Allocate correction proportionally to Pmax; fall back to equal split.
+            double pmaxSum = gens.Sum(g => g.Pmax);
+
+            bool busIsAtQmax = false;
+            bool busIsAtQmin = false;
+            if (switchedAtMax is not null && switchedAtMax.TryGetValue(busIdx, out bool atMax))
+            {
+                busIsAtQmax = atMax;
+                busIsAtQmin = !atMax;
+            }
+
+            foreach (var gen in gens)
+            {
+                double pgCorrection = pmaxSum > 0
+                    ? deltaPBus * gen.Pmax / pmaxSum
+                    : deltaPBus / gens.Count;
+
+                results.Add(new GeneratorResult(
+                    gen.BusId,
+                    gen.Pg + pgCorrection,
+                    qShare,
+                    busIsAtQmax,
+                    busIsAtQmin
+                ));
+            }
+        }
+
+        return results;
+    }
+
+    private static IReadOnlyDictionary<int, bool> BuildQLimitBound(
+        PowerNetwork network,
+        Dictionary<int, bool>? switchedAtMax)
+    {
+        if (switchedAtMax is null || switchedAtMax.Count == 0)
+            return new Dictionary<int, bool>();
+
+        return switchedAtMax.ToDictionary(
+            kv => network.Buses[kv.Key].Id,
+            kv => kv.Value
         );
     }
 }

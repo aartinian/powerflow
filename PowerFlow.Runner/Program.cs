@@ -208,6 +208,21 @@ var result = new NewtonRaphsonSolver
 
 Console.WriteLine();
 
+// Convergence banner
+string iters = $"{result.Iterations} iteration{(result.Iterations != 1 ? "s" : "")}";
+if (result.Converged)
+    Console.WriteLine(
+        $"  {BG()}CONVERGED{R()} in {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
+    );
+else
+    Console.WriteLine(
+        $"  {BR()}DID NOT CONVERGE{R()} after {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
+    );
+Console.WriteLine();
+
+// Ruler helper (local function — callable anywhere in this scope)
+string Ruler(string label) => $"{BY()}── {label} {new string('─', Math.Max(0, 44 - label.Length))}─{R()}";
+
 // Bus table
 if (!noBuses)
 {
@@ -224,6 +239,21 @@ if (!noBuses)
             $"{net.Buses[i].Pd,8:F1}  {net.Buses[i].Qd,10:F1}"
         );
     Console.WriteLine();
+
+    // Generator table
+    if (result.Generators.Count > 0)
+    {
+        Console.WriteLine($"{"Bus",-4}  {"Pg (MW)",8}  {"Qg (MVAr)",10}  {"Q-limit",7}");
+        Console.WriteLine($"{"----",-4}  {"--------",8}  {"----------",10}  {"-------",7}");
+        foreach (var gr in result.Generators)
+        {
+            string qlim = gr.IsAtQmax ? $"{BY()}Qmax{R()}"
+                        : gr.IsAtQmin ? $"{BY()}Qmin{R()}"
+                        : "";
+            Console.WriteLine($"{gr.BusId,-4}  {gr.Pg,8:F1}  {gr.Qg,10:F1}  {qlim}");
+        }
+        Console.WriteLine();
+    }
 }
 
 // Branch table — always iterate (needed for thermal violation detection)
@@ -259,47 +289,85 @@ foreach (var bf in result.BranchFlows)
 // Voltage violations
 if (result.VoltageViolations.Count > 0)
 {
-    Console.WriteLine(Ruler("Voltage Violations"));
     Console.WriteLine();
+    Console.WriteLine(Ruler("Voltage Violations"));
     foreach (var v in result.VoltageViolations)
     {
-        string kind = v.IsOverVoltage ? "over " : "under";
+        string kind   = v.IsOverVoltage ? "over " : "under";
+        string kvPart = v.BaseKv > 0
+            ? $"  ({v.VmKv:F2} kV, limit {v.VminKv:F2}–{v.VmaxKv:F2} kV)"
+            : "";
         Console.WriteLine(
-            $"Bus {v.BusId,-4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}–{v.Vmax:F3} pu)"
+            $"  Bus {v.BusId,-4}  Vm={v.Vm:F4} pu  ({kind}voltage, limit {v.Vmin:F3}–{v.Vmax:F3} pu){kvPart}"
         );
     }
-    Console.WriteLine();
 }
 
 // Thermal violations
 if (thermalViols.Count > 0)
 {
-    Console.WriteLine(Ruler("Thermal Violations"));
     Console.WriteLine();
+    Console.WriteLine(Ruler("Thermal Violations"));
     foreach (var bf in thermalViols)
         Console.WriteLine(
-            $"   Branch {bf.FromBusId,-4}→{bf.ToBusId,-4}  Loading={bf.LoadingPct:F1}%  " +
+            $"  Branch {bf.FromBusId,-4}→{bf.ToBusId,-4}  Loading={bf.LoadingPct:F1}%  " +
             $"(limit {bf.RateA * mva:F1} MVA)"
         );
-    Console.WriteLine();
 }
 
-// Summary footer
-double totalPg   = result.Pg.Sum() * mva;
-double totalQg   = result.Qg.Sum() * mva;
-double totalPd   = net.Buses.Sum(b => b.Pd);
-double totalQd   = net.Buses.Sum(b => b.Qd);
-double totalLoss = result.BranchFlows.Sum(bf => (bf.Pij + bf.Pji) * mva);
+// Summary
+var bestBf = result.BranchFlows
+    .Where(bf => !double.IsNaN(bf.LoadingPct))
+    .OrderByDescending(bf => bf.LoadingPct)
+    .FirstOrDefault();
+var worstV = result.VoltageViolations.Count > 0
+    ? result.VoltageViolations
+        .OrderByDescending(v => Math.Abs(v.Vm - (v.IsOverVoltage ? v.Vmax : v.Vmin)))
+        .First()
+    : null;
 
-string Ruler(string label) => $"{BY()}── {label} {new string('─', Math.Max(0, 44 - label.Length))}─{R()}";
-
+Console.WriteLine();
 Console.WriteLine(Ruler("Balance"));
+if (result.Balance is { } bal)
+{
+    Console.WriteLine($"  {"Generation",-14}  {bal.TotalGenerationMw,8:F1} MW   {bal.TotalGenerationMvar,8:F1} MVAr");
+    Console.WriteLine($"  {"Load",-14}  {bal.TotalLoadMw,8:F1} MW   {bal.TotalLoadMvar,8:F1} MVAr");
+    Console.WriteLine($"  {"Losses",-14}  {bal.TotalLossesMw,8:F1} MW   ({bal.LossPct:F2} %)");
+    if (Math.Abs(result.Lambda * mva) >= 0.05)
+        Console.WriteLine($"  {"Dist. slack λ",-14}  {result.Lambda * mva,+8:F1} MW");
+}
+else
+{
+    Console.WriteLine("  (not available — solver did not converge)");
+}
+
+if (result.QLimitBound.Count > 0)
+{
+    Console.WriteLine();
+    Console.WriteLine(Ruler("Q-Limits Binding"));
+    foreach (var (busId, atMax) in result.QLimitBound)
+    {
+        var gr    = result.Generators.FirstOrDefault(g => g.BusId == busId);
+        string lm = atMax ? $"{BY()}Qmax{R()}" : $"{BY()}Qmin{R()}";
+        string gv = gr is not null ? $"  Pg={gr.Pg:F1} MW  Qg={gr.Qg:F1} MVAr" : "";
+        Console.WriteLine($"  Bus {busId,-4}  [{lm}]{gv}");
+    }
+}
+
 Console.WriteLine();
-Console.WriteLine($"{"Generation",-14}  {totalPg,8:F1} MW   {totalQg,8:F1} MVAr");
-Console.WriteLine($"{"Load",-14}  {totalPd,8:F1} MW   {totalQd,8:F1} MVAr");
-Console.WriteLine($"{"Losses",-14}  {totalLoss,8:F1} MW");
-if (Math.Abs(result.Lambda * mva) >= 0.05)
-    Console.WriteLine($"  {"Dist. slack λ",-14}  {result.Lambda * mva,+8:F1} MW");
-Console.WriteLine();
+Console.WriteLine(Ruler("Solver"));
+Console.WriteLine($"  {"Iterations",-14}  {result.Iterations}   max|f| = {result.MaxMismatch:E2} pu");
+if (worstV is not null)
+{
+    string kind  = worstV.IsOverVoltage ? "over" : "under";
+    string kvNote = worstV.BaseKv > 0 ? $"  ({worstV.VmKv:F2} kV)" : "";
+    Console.WriteLine(
+        $"  {"Worst voltage",-14}  Bus {worstV.BusId,-5} {worstV.Vm:F4} pu{kvNote}  ({kind}voltage)"
+    );
+}
+if (bestBf is not null)
+    Console.WriteLine(
+        $"  {"Max loading",-14}  {bestBf.FromBusId}→{bestBf.ToBusId}   {bestBf.LoadingPct:F1} %"
+    );
 
 return result.Converged ? 0 : 2;
