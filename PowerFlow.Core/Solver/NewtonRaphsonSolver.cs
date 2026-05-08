@@ -103,8 +103,8 @@ public class NewtonRaphsonSolver
     /// fixed across multiple solves (sensitivity sweeps, parameter studies) to avoid
     /// rebuilding the admittance matrix each time.
     /// </summary>
-    public PowerFlowResult Solve(PowerNetwork network)
-        => Solve(network, YBusBuilder.Build(network));
+    public PowerFlowResult Solve(PowerNetwork network) =>
+        Solve(network, YBusBuilder.Build(network));
 
     /// <summary>
     /// Solve the AC power flow using a caller-supplied <paramref name="ybus"/>.
@@ -339,8 +339,20 @@ public class NewtonRaphsonSolver
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
 
-        return MakeResult(network, converged, totalNrIters, limitIter, Vm, Va, mismatch, pg, qg,
-            lambda, switchedAtMax, DistributedSlack ? alpha : null);
+        return MakeResult(
+            network,
+            converged,
+            totalNrIters,
+            limitIter,
+            Vm,
+            Va,
+            mismatch,
+            pg,
+            qg,
+            lambda,
+            switchedAtMax,
+            DistributedSlack ? alpha : null
+        );
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -860,13 +872,15 @@ public class NewtonRaphsonSolver
                 if (bus.Type == BusType.Isolated)
                     continue;
                 if (Vm[i] < bus.Vmin || Vm[i] > bus.Vmax)
-                    violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax, bus.BaseKv));
+                    violations.Add(
+                        new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax, bus.BaseKv)
+                    );
             }
         }
 
-        var balance      = converged ? BuildSystemBalance(network, pg, qg, Vm, flows) : null;
-        var generators   = BuildGeneratorResults(network, qg, lambda, alpha, switchedAtMax);
-        var qLimitBound  = BuildQLimitBound(network, switchedAtMax);
+        var balance = converged ? BuildSystemBalance(network, pg, qg, Vm, flows) : null;
+        var generators = BuildGeneratorResults(network, qg, lambda, alpha, switchedAtMax);
+        var qLimitBound = BuildQLimitBound(network, switchedAtMax);
 
         return new PowerFlowResult(
             converged,
@@ -893,25 +907,32 @@ public class NewtonRaphsonSolver
         double[] pg,
         double[] qg,
         double[] Vm,
-        IReadOnlyList<BranchFlow> flows)
+        IReadOnlyList<BranchFlow> flows
+    )
     {
         double baseMva = network.BaseMva;
 
-        double totalPgMw     = pg.Sum() * baseMva;
-        double totalPdMw     = network.Buses.Sum(b => b.Pd);
+        double totalPgMw = pg.Sum() * baseMva;
+        double totalPdMw = network.Buses.Sum(b => b.Pd);
         double totalLossesMw = flows.Sum(f => (f.Pij + f.Pji) * baseMva);
-        double lossPct       = totalPdMw > 0 ? totalLossesMw / totalPdMw * 100.0 : 0.0;
+        double lossPct = totalPdMw > 0 ? totalLossesMw / totalPdMw * 100.0 : 0.0;
 
-        double totalQgMvar     = qg.Sum() * baseMva;
-        double totalQdMvar     = network.Buses.Sum(b => b.Qd);
-        double totalShuntMvar  = 0.0;
+        double totalQgMvar = qg.Sum() * baseMva;
+        double totalQdMvar = network.Buses.Sum(b => b.Qd);
+        double totalShuntMvar = 0.0;
         for (int i = 0; i < network.Buses.Count; i++)
             totalShuntMvar += network.Buses[i].Bs * Vm[i] * Vm[i];
         double totalLossesMvar = flows.Sum(f => (f.Qij + f.Qji) * baseMva);
 
         return new SystemBalance(
-            totalPgMw, totalPdMw, totalLossesMw, lossPct,
-            totalQgMvar, totalQdMvar, totalShuntMvar, totalLossesMvar
+            totalPgMw,
+            totalPdMw,
+            totalLossesMw,
+            lossPct,
+            totalQgMvar,
+            totalQdMvar,
+            totalShuntMvar,
+            totalLossesMvar
         );
     }
 
@@ -926,21 +947,22 @@ public class NewtonRaphsonSolver
         double[] qg,
         double lambda,
         double[]? alpha,
-        Dictionary<int, bool>? switchedAtMax)
+        Dictionary<int, bool>? switchedAtMax
+    )
     {
         double baseMva = network.BaseMva;
         var results = new List<GeneratorResult>();
 
         // Group in-service generators by bus array index.
-        var byBus = network.Generators
-            .Where(g => g.IsInService)
+        var byBus = network
+            .Generators.Where(g => g.IsInService)
             .GroupBy(g => network.IndexOf(g.BusId))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var (busIdx, gens) in byBus)
         {
             double qgBusMvar = qg[busIdx] * baseMva;
-            double qShare    = qgBusMvar / gens.Count;
+            double qShare = qgBusMvar / gens.Count;
 
             // Bus-level distributed-slack correction (0 when not using distributed slack).
             double deltaPBus = alpha is not null ? alpha[busIdx] * lambda * baseMva : 0.0;
@@ -958,17 +980,18 @@ public class NewtonRaphsonSolver
 
             foreach (var gen in gens)
             {
-                double pgCorrection = pmaxSum > 0
-                    ? deltaPBus * gen.Pmax / pmaxSum
-                    : deltaPBus / gens.Count;
+                double pgCorrection =
+                    pmaxSum > 0 ? deltaPBus * gen.Pmax / pmaxSum : deltaPBus / gens.Count;
 
-                results.Add(new GeneratorResult(
-                    gen.BusId,
-                    gen.Pg + pgCorrection,
-                    qShare,
-                    busIsAtQmax,
-                    busIsAtQmin
-                ));
+                results.Add(
+                    new GeneratorResult(
+                        gen.BusId,
+                        gen.Pg + pgCorrection,
+                        qShare,
+                        busIsAtQmax,
+                        busIsAtQmin
+                    )
+                );
             }
         }
 
@@ -977,14 +1000,12 @@ public class NewtonRaphsonSolver
 
     private static IReadOnlyDictionary<int, bool> BuildQLimitBound(
         PowerNetwork network,
-        Dictionary<int, bool>? switchedAtMax)
+        Dictionary<int, bool>? switchedAtMax
+    )
     {
         if (switchedAtMax is null || switchedAtMax.Count == 0)
             return new Dictionary<int, bool>();
 
-        return switchedAtMax.ToDictionary(
-            kv => network.Buses[kv.Key].Id,
-            kv => kv.Value
-        );
+        return switchedAtMax.ToDictionary(kv => network.Buses[kv.Key].Id, kv => kv.Value);
     }
 }

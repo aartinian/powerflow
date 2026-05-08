@@ -19,8 +19,8 @@ public sealed class ValidationError
         ValidationSeverity severity = ValidationSeverity.Error
     )
     {
-        Code     = code;
-        Message  = message;
+        Code = code;
+        Message = message;
         Severity = severity;
     }
 }

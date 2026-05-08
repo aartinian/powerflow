@@ -19,12 +19,14 @@ public class SolverHygieneTests
     {
         // The logger prints "iter N  mismatch ... converged" where N = totalNrIters.
         // result.Iterations must equal that N (cumulative across outer loops).
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
-        Assert.True(result.Iterations >= 1,
-            "A converged solve must have taken at least one NR iteration.");
+        Assert.True(
+            result.Iterations >= 1,
+            "A converged solve must have taken at least one NR iteration."
+        );
     }
 
     [Fact]
@@ -33,21 +35,25 @@ public class SolverHygieneTests
         // With Q-limits active and case14_qlimit forcing a PV→PQ switch, the solver
         // runs ≥ 2 outer loops. Iterations should be the total NR count, not just
         // the last inner-loop count.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
-        Assert.True(result.OuterIterations >= 2,
-            $"Expected ≥ 2 outer iterations, got {result.OuterIterations}");
+        Assert.True(
+            result.OuterIterations >= 2,
+            $"Expected ≥ 2 outer iterations, got {result.OuterIterations}"
+        );
         // Cumulative NR count must be ≥ outer count (each outer loop takes ≥ 1 NR step).
-        Assert.True(result.Iterations >= result.OuterIterations,
-            $"Iterations ({result.Iterations}) < OuterIterations ({result.OuterIterations})");
+        Assert.True(
+            result.Iterations >= result.OuterIterations,
+            $"Iterations ({result.Iterations}) < OuterIterations ({result.OuterIterations})"
+        );
     }
 
     [Fact]
     public void OuterIterations_IsOne_WhenNoQLimitSwitches()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true, EnforceLimits = false }.Solve(net);
 
         // With limits off there is exactly one outer pass.
@@ -76,7 +82,7 @@ public class SolverHygieneTests
     [Fact]
     public void Pg_Array_IsMutableSafely()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         double originalPg0 = result.Pg[0];
@@ -90,7 +96,7 @@ public class SolverHygieneTests
     [Fact]
     public void Qg_Array_IsMutableSafely()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         double originalQg0 = result.Qg[0];
@@ -105,15 +111,15 @@ public class SolverHygieneTests
     [Fact]
     public void PrebuiltYbus_ProducesIdenticalResult()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var solver = new NewtonRaphsonSolver { FlatStart = true };
 
         var r1 = solver.Solve(net);
         var r2 = solver.Solve(net, YBusBuilder.Build(net));
 
-        Assert.Equal(r1.Converged,    r2.Converged);
-        Assert.Equal(r1.Iterations,   r2.Iterations);
-        Assert.Equal(r1.MaxMismatch,  r2.MaxMismatch, precision: 10);
+        Assert.Equal(r1.Converged, r2.Converged);
+        Assert.Equal(r1.Iterations, r2.Iterations);
+        Assert.Equal(r1.MaxMismatch, r2.MaxMismatch, precision: 10);
         for (int i = 0; i < net.Buses.Count; i++)
         {
             Assert.Equal(r1.Vm[i], r2.Vm[i], precision: 10);
@@ -125,9 +131,9 @@ public class SolverHygieneTests
     public void PrebuiltYbus_AllowsReuseAcrossSolves()
     {
         // Build once, solve twice — second solve should match first.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case118.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case118.m"));
         var solver = new NewtonRaphsonSolver { FlatStart = true };
-        var ybus   = YBusBuilder.Build(net);
+        var ybus = YBusBuilder.Build(net);
 
         var r1 = solver.Solve(net, ybus);
         var r2 = solver.Solve(net, ybus);
@@ -141,12 +147,10 @@ public class SolverHygieneTests
     [Fact]
     public void WarmStartFromDc_Converges()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
-        var result = new NewtonRaphsonSolver
-        {
-            FlatStart     = true,
-            WarmStartFromDc = true,
-        }.Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = true }.Solve(
+            net
+        );
 
         Assert.True(result.Converged);
     }
@@ -155,9 +159,11 @@ public class SolverHygieneTests
     public void WarmStartFromDc_ProducesCorrectSolution()
     {
         // Solution must match the standard solve to within NR tolerance.
-        var net      = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var standard = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
-        var warmed   = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = true }.Solve(net);
+        var warmed = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = true }.Solve(
+            net
+        );
 
         for (int i = 0; i < net.Buses.Count; i++)
         {
@@ -170,14 +176,18 @@ public class SolverHygieneTests
     public void WarmStartFromDc_ConvergesInFewerIterations_Case300()
     {
         // For a large case from flat start, DC warm-start should reduce NR iterations.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case300.m"));
-        var flat   = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
-        var warmed = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = true }.Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case300.m"));
+        var flat = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
+        var warmed = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = true }.Solve(
+            net
+        );
 
-        Assert.True(flat.Converged,   "flat-start must converge");
+        Assert.True(flat.Converged, "flat-start must converge");
         Assert.True(warmed.Converged, "DC warm-start must converge");
-        Assert.True(warmed.Iterations <= flat.Iterations,
-            $"DC warm-start ({warmed.Iterations} iters) should not need more than flat ({flat.Iterations} iters)");
+        Assert.True(
+            warmed.Iterations <= flat.Iterations,
+            $"DC warm-start ({warmed.Iterations} iters) should not need more than flat ({flat.Iterations} iters)"
+        );
     }
 
     // ─── Validator placement ────────────────────────────────────────────────────
@@ -187,7 +197,7 @@ public class SolverHygieneTests
     {
         // Compile-time proof: NetworkValidator, ValidationResult, ValidationSeverity
         // are all accessible from PowerFlow.Core.Validation.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         PowerFlow.Core.Validation.ValidationResult result =
             PowerFlow.Core.Validation.NetworkValidator.Validate(net);
         Assert.True(result.IsValid);
@@ -206,23 +216,22 @@ public class SolverHygieneTests
         var buses = new List<Bus>
         {
             new(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 0, 1.1, 0.9),
-            new(2, BusType.PV,    0, 0, 0, 0, 1.0, 0, 0, 1.1, 0.9),
+            new(2, BusType.PV, 0, 0, 0, 0, 1.0, 0, 0, 1.1, 0.9),
         };
-        var branches = new List<Branch>
-        {
-            new(1, 2, 0.01, 0.1, 0, 1, 0, 0, true),
-        };
+        var branches = new List<Branch> { new(1, 2, 0.01, 0.1, 0, 1, 0, 0, true) };
         var generators = new List<Generator>
         {
             new(1, 100, 0, 50, -50, 1.0, 200, 0, true),
-            new(2, 50,  0, 30, -30, 1.05, 100, 0, true), // Vg = 1.05
-            new(2, 20,  0, 20, -20, 1.02, 50,  0, true), // Vg = 1.02 — disagrees
+            new(2, 50, 0, 30, -30, 1.05, 100, 0, true), // Vg = 1.05
+            new(2, 20, 0, 20, -20, 1.02, 50, 0, true), // Vg = 1.02 — disagrees
         };
 
-        var net    = new PowerNetwork(100, buses, branches, generators);
+        var net = new PowerNetwork(100, buses, branches, generators);
         var result = NetworkValidator.Validate(net);
 
-        Assert.True(result.Warnings.Any(w => w.Code == "MULTIPLE_VG_AT_BUS"),
-            "Expected MULTIPLE_VG_AT_BUS warning when generators at same bus have different Vg");
+        Assert.True(
+            result.Warnings.Any(w => w.Code == "MULTIPLE_VG_AT_BUS"),
+            "Expected MULTIPLE_VG_AT_BUS warning when generators at same bus have different Vg"
+        );
     }
 }

@@ -206,4 +206,179 @@ public class MatpowerParserTests
 
         Assert.Equal(14, net.Buses.Count);
     }
+
+    // ── Generator.MBase ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_GeneratorMBase_ReadFromCaseFile()
+    {
+        // case14 gen column 6 (0-indexed) = 100 (machine base = system base for all gens).
+        var gens = MatpowerParser.ParseFile(TestData.Path("case14.m")).Generators;
+        Assert.All(gens, g => Assert.Equal(100.0, g.MBase));
+    }
+
+    [Fact]
+    public void Parse_GeneratorMBase_Zero_WhenNotInCaseString()
+    {
+        // A minimal case with only 10 gen columns (old format without mBase) is not
+        // tested here because MATPOWER 2.x always includes mBase; the default of 0
+        // ("use system base") is tested via the model default below.
+        var gen = new Generator(1, 0, 0, 0, 0, 1.0, 0, 0, true);
+        Assert.Equal(0.0, gen.MBase);
+    }
+
+    // ── Branch.Angmin / Branch.Angmax ─────────────────────────────────────────
+
+    [Fact]
+    public void Parse_BranchAngminAngmax_ReadFromCaseFile()
+    {
+        // case14 branch rows all carry angmin=-360, angmax=360.
+        var branches = MatpowerParser.ParseFile(TestData.Path("case14.m")).Branches;
+        Assert.All(
+            branches,
+            b =>
+            {
+                Assert.Equal(-360.0, b.Angmin);
+                Assert.Equal(360.0, b.Angmax);
+            }
+        );
+    }
+
+    [Fact]
+    public void Parse_BranchAngmin_DefaultsToNegative360_WhenColumnsAbsent()
+    {
+        // A branch block with exactly 11 columns (no angmin/angmax) must use defaults.
+        const string noAngCase = """
+            function mpc = mini
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  3  0  0  0  0  6  1.0  0  100  1  1.05  0.95;
+                2  1  100 50 0 0 6  1.0  0  100  1  1.05  0.95;
+            ];
+            mpc.gen = [
+                1  100  0  200  -100  1.0  100  1  300  0;
+            ];
+            mpc.branch = [
+                1  2  0.02  0.10  0  100  0  0  0  0  1;
+            ];
+            """;
+
+        var branch = MatpowerParser.Parse(noAngCase).Branches[0];
+
+        Assert.Equal(-360.0, branch.Angmin);
+        Assert.Equal(360.0, branch.Angmax);
+    }
+
+    // ── Duplicate bus ID rejection ────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_DuplicateBusId_Throws()
+    {
+        const string dupCase = """
+            function mpc = dup
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  3  0  0  0  0  6  1.0  0  100  1  1.05  0.95;
+                1  1  100 50 0  0  6  1.0  0  100  1  1.05  0.95;
+            ];
+            mpc.gen = [
+                1  100  0  200  -100  1.0  100  1  300  0;
+            ];
+            mpc.branch = [
+                1  1  0.02  0.10  0  100  0  0  0  0  1;
+            ];
+            """;
+
+        Assert.Throws<ArgumentException>(() => MatpowerParser.Parse(dupCase));
+    }
+
+    [Fact]
+    public void PowerNetwork_RejectsDuplicateBusIds_Directly()
+    {
+        var buses = new List<Bus>
+        {
+            new(1, BusType.Slack, 0, 0, 0, 0, 1.0, 0, 0, 1.1, 0.9),
+            new(1, BusType.PQ, 50, 0, 0, 0, 1.0, 0, 0, 1.1, 0.9), // duplicate ID 1
+        };
+        Assert.Throws<ArgumentException>(() => new PowerNetwork(100, buses, [], []));
+    }
+
+    // ── Parse error messages include line number ───────────────────────────────
+
+    [Fact]
+    public void Parse_BusTooFewColumns_ThrowsFormatExceptionWithLineNumber()
+    {
+        const string bad = """
+            function mpc = bad
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  3  0  0  0  0;
+            ];
+            mpc.gen = [];
+            mpc.branch = [];
+            """;
+
+        var ex = Assert.Throws<FormatException>(() => MatpowerParser.Parse(bad));
+        Assert.Contains("line", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("bus", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Parse_GenTooFewColumns_ThrowsFormatExceptionWithLineNumber()
+    {
+        const string bad = """
+            function mpc = bad
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  3  0  0  0  0  6  1.0  0  100  1  1.05  0.95;
+            ];
+            mpc.gen = [
+                1  100;
+            ];
+            mpc.branch = [];
+            """;
+
+        var ex = Assert.Throws<FormatException>(() => MatpowerParser.Parse(bad));
+        Assert.Contains("line", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("gen", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Parse_BranchTooFewColumns_ThrowsFormatExceptionWithLineNumber()
+    {
+        const string bad = """
+            function mpc = bad
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  3  0  0  0  0  6  1.0  0  100  1  1.05  0.95;
+            ];
+            mpc.gen = [
+                1  100  0  200  -100  1.0  100  1  300  0;
+            ];
+            mpc.branch = [
+                1  2  0.02;
+            ];
+            """;
+
+        var ex = Assert.Throws<FormatException>(() => MatpowerParser.Parse(bad));
+        Assert.Contains("line", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("branch", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Parse_MalformedNumericValue_ThrowsFormatExceptionWithLineNumber()
+    {
+        const string bad = """
+            function mpc = bad
+            mpc.baseMVA = 100;
+            mpc.bus = [
+                1  BADVALUE  0  0  0  0  6  1.0  0  100  1  1.05  0.95;
+            ];
+            mpc.gen = [];
+            mpc.branch = [];
+            """;
+
+        var ex = Assert.Throws<FormatException>(() => MatpowerParser.Parse(bad));
+        Assert.Contains("line", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

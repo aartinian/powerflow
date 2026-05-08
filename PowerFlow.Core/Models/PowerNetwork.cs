@@ -30,6 +30,17 @@ public class PowerNetwork
         Branches = branches.ToList();
         Generators = generators.ToList();
 
+        // Reject duplicate bus IDs early — duplicates produce silent NR failures
+        // that are extremely hard to diagnose from solver output alone.
+        for (int i = 1; i < Buses.Count; i++)
+        {
+            if (Buses[i].Id == Buses[i - 1].Id)
+                throw new ArgumentException(
+                    $"Duplicate bus ID {Buses[i].Id} in network. "
+                        + "Each bus must have a unique integer identifier."
+                );
+        }
+
         _busIndex = Buses.Select((b, i) => (b.Id, i)).ToDictionary(x => x.Id, x => x.i);
     }
 

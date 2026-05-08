@@ -14,7 +14,7 @@ public class SolverResultCompletenessTests
     [Fact]
     public void SystemBalance_NotNull_WhenConverged()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
@@ -25,7 +25,7 @@ public class SolverResultCompletenessTests
     public void SystemBalance_IsNull_WhenNotConverged()
     {
         // Force non-convergence by allowing only 1 iteration on a non-trivial network.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true, MaxIterations = 1 }.Solve(net);
 
         Assert.False(result.Converged);
@@ -35,7 +35,7 @@ public class SolverResultCompletenessTests
     [Fact]
     public void SystemBalance_TotalLossesMw_MatchesBranchFlowSum()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         double expected = result.BranchFlows.Sum(bf => (bf.Pij + bf.Pji) * net.BaseMva);
@@ -45,9 +45,9 @@ public class SolverResultCompletenessTests
     [Fact]
     public void SystemBalance_PowerBalance_Consistent()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
-        var b      = result.Balance!;
+        var b = result.Balance!;
 
         // Generation ≈ Load + Losses (within solver tolerance scaled to MW).
         Assert.Equal(b.TotalGenerationMw, b.TotalLoadMw + b.TotalLossesMw, precision: 2);
@@ -56,9 +56,9 @@ public class SolverResultCompletenessTests
     [Fact]
     public void SystemBalance_LossPct_ConsistentWithMwValues()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
-        var b      = result.Balance!;
+        var b = result.Balance!;
 
         double expected = b.TotalLoadMw > 0 ? b.TotalLossesMw / b.TotalLoadMw * 100.0 : 0.0;
         Assert.Equal(expected, b.LossPct, precision: 6);
@@ -69,7 +69,7 @@ public class SolverResultCompletenessTests
     [Fact]
     public void Generators_Count_EqualsInServiceGeneratorCount()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         int expected = net.Generators.Count(g => g.IsInService);
@@ -79,18 +79,15 @@ public class SolverResultCompletenessTests
     [Fact]
     public void Generators_BusIds_MatchNetworkGenerators()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
-        var expectedIds = net.Generators
-            .Where(g => g.IsInService)
+        var expectedIds = net
+            .Generators.Where(g => g.IsInService)
             .Select(g => g.BusId)
             .OrderBy(id => id)
             .ToList();
-        var actualIds = result.Generators
-            .Select(gr => gr.BusId)
-            .OrderBy(id => id)
-            .ToList();
+        var actualIds = result.Generators.Select(gr => gr.BusId).OrderBy(id => id).ToList();
 
         Assert.Equal(expectedIds, actualIds);
     }
@@ -98,12 +95,18 @@ public class SolverResultCompletenessTests
     [Fact]
     public void Generators_Pg_NonNegative_ForAllGenerators()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case118.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case118.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
-        Assert.All(result.Generators, gr => Assert.True(gr.Pg >= -1e-3,
-            $"Generator at bus {gr.BusId} has negative Pg = {gr.Pg:F3} MW"));
+        Assert.All(
+            result.Generators,
+            gr =>
+                Assert.True(
+                    gr.Pg >= -1e-3,
+                    $"Generator at bus {gr.BusId} has negative Pg = {gr.Pg:F3} MW"
+                )
+        );
     }
 
     [Fact]
@@ -112,18 +115,18 @@ public class SolverResultCompletenessTests
         // For PV buses the scheduled dispatch is held fixed by the solver, so
         // GeneratorResult.Pg (= gen.Pg from input) should match the solved bus-level
         // Pg within numerical tolerance. The slack bus is excluded — its output floats.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
-        var pvBusIndices = net.Buses
-            .Select((b, i) => (b, i))
+        var pvBusIndices = net
+            .Buses.Select((b, i) => (b, i))
             .Where(t => t.b.Type == PowerFlow.Core.Models.BusType.PV)
             .ToDictionary(t => t.b.Id, t => t.i);
 
         foreach (var gr in result.Generators.Where(g => pvBusIndices.ContainsKey(g.BusId)))
         {
-            int idx       = pvBusIndices[gr.BusId];
-            double busPg  = result.Pg[idx] * net.BaseMva;
+            int idx = pvBusIndices[gr.BusId];
+            double busPg = result.Pg[idx] * net.BaseMva;
             Assert.Equal(gr.Pg, busPg, precision: 1); // within 0.05 MW
         }
     }
@@ -131,12 +134,10 @@ public class SolverResultCompletenessTests
     [Fact]
     public void Generators_DistributedSlack_PgIncludesLambdaCorrection()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
-        var result = new NewtonRaphsonSolver
-        {
-            FlatStart        = true,
-            DistributedSlack = true,
-        }.Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true, DistributedSlack = true }.Solve(
+            net
+        );
 
         Assert.True(result.Converged);
         // With distributed slack λ ≠ 0, total gen-result Pg should still match bus-level sum.
@@ -151,7 +152,7 @@ public class SolverResultCompletenessTests
     public void VoltageViolation_VmKv_EqualsPuTimesBaseKv()
     {
         // case14 bus 8 (a shunt compensator at 1.09 pu) exceeds Vmax, giving a violation.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
@@ -161,7 +162,7 @@ public class SolverResultCompletenessTests
         {
             // Find bus BaseKv from the network.
             var bus = net.Buses.First(b => b.Id == v.BusId);
-            Assert.Equal(v.Vm   * bus.BaseKv, v.VmKv,   precision: 9);
+            Assert.Equal(v.Vm * bus.BaseKv, v.VmKv, precision: 9);
             Assert.Equal(v.Vmin * bus.BaseKv, v.VminKv, precision: 9);
             Assert.Equal(v.Vmax * bus.BaseKv, v.VmaxKv, precision: 9);
         }
@@ -170,15 +171,14 @@ public class SolverResultCompletenessTests
     [Fact]
     public void VoltageViolation_BaseKv_MatchesNetworkBusData()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
         Assert.NotEmpty(result.VoltageViolations);
 
         var busById = net.Buses.ToDictionary(b => b.Id);
-        Assert.All(result.VoltageViolations, v =>
-            Assert.Equal(busById[v.BusId].BaseKv, v.BaseKv));
+        Assert.All(result.VoltageViolations, v => Assert.Equal(busById[v.BusId].BaseKv, v.BaseKv));
     }
 
     // ─── Q-limit binding info ───────────────────────────────────────────────────
@@ -186,7 +186,7 @@ public class SolverResultCompletenessTests
     [Fact]
     public void QLimitBound_Empty_WhenLimitsDisabled()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true, EnforceLimits = false }.Solve(net);
 
         Assert.Empty(result.QLimitBound);
@@ -196,31 +196,31 @@ public class SolverResultCompletenessTests
     public void QLimitBound_ContainsBus2_WhenQmaxTightened()
     {
         // case14_qlimit has gen at bus 2 with Qmax=20 MVAr; natural Qg ~42 MVAr → ceiling.
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
-        Assert.True(result.QLimitBound.ContainsKey(2),
-            "Bus 2 should be pinned at Qmax with tightened Qmax=20 MVAr");
-        Assert.True(result.QLimitBound[2],
-            "Bus 2 should be at Qmax (not Qmin)");
+        Assert.True(
+            result.QLimitBound.ContainsKey(2),
+            "Bus 2 should be pinned at Qmax with tightened Qmax=20 MVAr"
+        );
+        Assert.True(result.QLimitBound[2], "Bus 2 should be at Qmax (not Qmin)");
     }
 
     [Fact]
     public void QLimitBound_Keys_AreValidBusIds()
     {
-        var net      = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
-        var result   = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
         var validIds = net.Buses.Select(b => b.Id).ToHashSet();
 
-        Assert.All(result.QLimitBound.Keys, id =>
-            Assert.Contains(id, validIds));
+        Assert.All(result.QLimitBound.Keys, id => Assert.Contains(id, validIds));
     }
 
     [Fact]
     public void QLimitBound_BoundGenerators_HaveIsAtQmaxOrIsAtQmin_Set()
     {
-        var net    = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
+        var net = MatpowerParser.ParseFile(TestData.Path("case14_qlimit.m"));
         var result = new NewtonRaphsonSolver { FlatStart = true }.Solve(net);
 
         Assert.True(result.Converged);
@@ -228,11 +228,14 @@ public class SolverResultCompletenessTests
         {
             var gens = result.Generators.Where(gr => gr.BusId == busId).ToList();
             Assert.NotEmpty(gens);
-            Assert.All(gens, gr =>
-            {
-                Assert.Equal(atMax, gr.IsAtQmax);
-                Assert.Equal(!atMax, gr.IsAtQmin);
-            });
+            Assert.All(
+                gens,
+                gr =>
+                {
+                    Assert.Equal(atMax, gr.IsAtQmax);
+                    Assert.Equal(!atMax, gr.IsAtQmin);
+                }
+            );
         }
     }
 }

@@ -4,7 +4,8 @@ namespace PowerFlow.Core.Models;
 /// Immutable dispatch and capability data for one generator: real-power
 /// schedule, reactive limits, voltage setpoint, and active-power capacity.
 /// Multiple generators may share a bus; the solver aggregates their
-/// contributions per bus.
+/// contributions per bus. <see cref="MBase"/> is the machine MVA base;
+/// 0 means "use the system base" (the standard when the field is absent).
 /// </summary>
 public class Generator
 {
@@ -17,6 +18,7 @@ public class Generator
     public double Pmax { get; } // MW
     public double Pmin { get; } // MW
     public bool IsInService { get; }
+    public double MBase { get; } // MVA machine base; 0 = use system base
 
     public Generator(
         int busId,
@@ -27,7 +29,8 @@ public class Generator
         double vg,
         double pmax,
         double pmin,
-        bool isInService
+        bool isInService,
+        double mBase = 0
     )
     {
         BusId = busId;
@@ -39,5 +42,6 @@ public class Generator
         Pmax = pmax;
         Pmin = pmin;
         IsInService = isInService;
+        MBase = mBase;
     }
 }

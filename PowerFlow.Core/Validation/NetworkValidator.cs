@@ -35,18 +35,22 @@ public static class NetworkValidator
 
         if (slackBuses.Count == 0)
         {
-            errors.Add(new ValidationError(
-                "NO_SLACK_BUS",
-                "Network has no slack bus. Exactly one bus must have type Slack."
-            ));
+            errors.Add(
+                new ValidationError(
+                    "NO_SLACK_BUS",
+                    "Network has no slack bus. Exactly one bus must have type Slack."
+                )
+            );
         }
         else if (slackBuses.Count > 1)
         {
             var ids = string.Join(", ", slackBuses.Select(b => b.Id));
-            errors.Add(new ValidationError(
-                "MULTIPLE_SLACK_BUSES",
-                $"Network has {slackBuses.Count} slack buses ({ids}). Exactly one is required."
-            ));
+            errors.Add(
+                new ValidationError(
+                    "MULTIPLE_SLACK_BUSES",
+                    $"Network has {slackBuses.Count} slack buses ({ids}). Exactly one is required."
+                )
+            );
         }
     }
 
@@ -59,16 +63,20 @@ public static class NetworkValidator
         foreach (var br in network.Branches)
         {
             if (!busIds.Contains(br.FromBus))
-                errors.Add(new ValidationError(
-                    "BRANCH_FROM_BUS_MISSING",
-                    $"Branch {br.FromBus}→{br.ToBus}: from-bus {br.FromBus} not in bus list."
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "BRANCH_FROM_BUS_MISSING",
+                        $"Branch {br.FromBus}→{br.ToBus}: from-bus {br.FromBus} not in bus list."
+                    )
+                );
 
             if (!busIds.Contains(br.ToBus))
-                errors.Add(new ValidationError(
-                    "BRANCH_TO_BUS_MISSING",
-                    $"Branch {br.FromBus}→{br.ToBus}: to-bus {br.ToBus} not in bus list."
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "BRANCH_TO_BUS_MISSING",
+                        $"Branch {br.FromBus}→{br.ToBus}: to-bus {br.ToBus} not in bus list."
+                    )
+                );
         }
     }
 
@@ -81,10 +89,12 @@ public static class NetworkValidator
         foreach (var gen in network.Generators)
         {
             if (!busIds.Contains(gen.BusId))
-                errors.Add(new ValidationError(
-                    "GENERATOR_BUS_MISSING",
-                    $"Generator references bus {gen.BusId} which is not in the bus list."
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "GENERATOR_BUS_MISSING",
+                        $"Generator references bus {gen.BusId} which is not in the bus list."
+                    )
+                );
         }
     }
 
@@ -93,11 +103,13 @@ public static class NetworkValidator
         // A single-bus network has no branches by definition — skip the check.
         if (network.Buses.Count > 1 && !network.Branches.Any(b => b.IsInService))
         {
-            errors.Add(new ValidationError(
-                "NO_IN_SERVICE_BRANCHES",
-                "Network has no in-service branches. All buses are electrically isolated.",
-                ValidationSeverity.Warning
-            ));
+            errors.Add(
+                new ValidationError(
+                    "NO_IN_SERVICE_BRANCHES",
+                    "Network has no in-service branches. All buses are electrically isolated.",
+                    ValidationSeverity.Warning
+                )
+            );
         }
     }
 
@@ -154,12 +166,14 @@ public static class NetworkValidator
             return;
 
         var ids = string.Join(", ", stranded);
-        errors.Add(new ValidationError(
-            "NETWORK_ISLANDED",
-            $"{stranded.Count} bus(es) unreachable from slack bus {slackBus.Id}: {ids}. "
-                + "Each island needs its own slack bus, or mark disconnected buses as "
-                + "type Isolated (4)."
-        ));
+        errors.Add(
+            new ValidationError(
+                "NETWORK_ISLANDED",
+                $"{stranded.Count} bus(es) unreachable from slack bus {slackBus.Id}: {ids}. "
+                    + "Each island needs its own slack bus, or mark disconnected buses as "
+                    + "type Isolated (4)."
+            )
+        );
     }
 
     private static void CheckBusVoltageLimits(PowerNetwork network, List<ValidationError> errors)
@@ -167,11 +181,13 @@ public static class NetworkValidator
         foreach (var bus in network.Buses)
         {
             if (bus.Vmin >= bus.Vmax)
-                errors.Add(new ValidationError(
-                    "INVALID_VOLTAGE_LIMITS",
-                    $"Bus {bus.Id}: Vmin {bus.Vmin:F3} pu ≥ Vmax {bus.Vmax:F3} pu.",
-                    ValidationSeverity.Warning
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "INVALID_VOLTAGE_LIMITS",
+                        $"Bus {bus.Id}: Vmin {bus.Vmin:F3} pu ≥ Vmax {bus.Vmax:F3} pu.",
+                        ValidationSeverity.Warning
+                    )
+                );
         }
     }
 
@@ -180,18 +196,22 @@ public static class NetworkValidator
         foreach (var br in network.Branches.Where(b => b.IsInService))
         {
             if (br.TapRatio <= 0)
-                errors.Add(new ValidationError(
-                    "INVALID_TAP_RATIO",
-                    $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is not positive. "
-                        + "This will cause division by zero in the Y-bus."
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "INVALID_TAP_RATIO",
+                        $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is not positive. "
+                            + "This will cause division by zero in the Y-bus."
+                    )
+                );
 
             if (Math.Abs(br.PhaseShift) > 90.0)
-                errors.Add(new ValidationError(
-                    "PHASE_SHIFT_OUT_OF_RANGE",
-                    $"Branch {br.FromBus}→{br.ToBus}: phase shift {br.PhaseShift:F1}° is outside ±90°.",
-                    ValidationSeverity.Warning
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "PHASE_SHIFT_OUT_OF_RANGE",
+                        $"Branch {br.FromBus}→{br.ToBus}: phase shift {br.PhaseShift:F1}° is outside ±90°.",
+                        ValidationSeverity.Warning
+                    )
+                );
         }
     }
 
@@ -207,19 +227,23 @@ public static class NetworkValidator
         foreach (var gen in network.Generators.Where(g => g.IsInService))
         {
             if (gen.Pg > gen.Pmax)
-                errors.Add(new ValidationError(
-                    "GENERATOR_P_ABOVE_PMAX",
-                    $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW exceeds "
-                        + $"Pmax = {gen.Pmax:F1} MW.",
-                    ValidationSeverity.Warning
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "GENERATOR_P_ABOVE_PMAX",
+                        $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW exceeds "
+                            + $"Pmax = {gen.Pmax:F1} MW.",
+                        ValidationSeverity.Warning
+                    )
+                );
             else if (gen.Pg < gen.Pmin)
-                errors.Add(new ValidationError(
-                    "GENERATOR_P_BELOW_PMIN",
-                    $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW is below "
-                        + $"Pmin = {gen.Pmin:F1} MW.",
-                    ValidationSeverity.Warning
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "GENERATOR_P_BELOW_PMIN",
+                        $"Generator at bus {gen.BusId}: Pg = {gen.Pg:F1} MW is below "
+                            + $"Pmin = {gen.Pmin:F1} MW.",
+                        ValidationSeverity.Warning
+                    )
+                );
         }
     }
 
@@ -231,13 +255,10 @@ public static class NetworkValidator
     /// </summary>
     private static void CheckMultipleVgAtBus(PowerNetwork network, List<ValidationError> errors)
     {
-        var pvBusIds = network.Buses
-            .Where(b => b.Type == BusType.PV)
-            .Select(b => b.Id)
-            .ToHashSet();
+        var pvBusIds = network.Buses.Where(b => b.Type == BusType.PV).Select(b => b.Id).ToHashSet();
 
-        var gensByBus = network.Generators
-            .Where(g => g.IsInService && pvBusIds.Contains(g.BusId))
+        var gensByBus = network
+            .Generators.Where(g => g.IsInService && pvBusIds.Contains(g.BusId))
             .GroupBy(g => g.BusId);
 
         foreach (var group in gensByBus)
@@ -246,13 +267,15 @@ public static class NetworkValidator
             if (vgs.Count > 1)
             {
                 var vals = string.Join(", ", vgs.Select(v => $"{v:F4}"));
-                errors.Add(new ValidationError(
-                    "MULTIPLE_VG_AT_BUS",
-                    $"Bus {group.Key}: {group.Count()} generators with disagreeing Vg setpoints "
-                        + $"({vals} pu). The solver applies a single Vm per bus; "
-                        + "one generator's setpoint will be ignored.",
-                    ValidationSeverity.Warning
-                ));
+                errors.Add(
+                    new ValidationError(
+                        "MULTIPLE_VG_AT_BUS",
+                        $"Bus {group.Key}: {group.Count()} generators with disagreeing Vg setpoints "
+                            + $"({vals} pu). The solver applies a single Vm per bus; "
+                            + "one generator's setpoint will be ignored.",
+                        ValidationSeverity.Warning
+                    )
+                );
             }
         }
     }

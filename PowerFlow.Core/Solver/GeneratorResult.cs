@@ -10,17 +10,17 @@ namespace PowerFlow.Core.Solver;
 /// </summary>
 public class GeneratorResult
 {
-    public int    BusId    { get; }
-    public double Pg       { get; } // MW   — dispatched real power (+ distributed-slack correction)
-    public double Qg       { get; } // MVAr — bus reactive output shared equally among bus generators
-    public bool   IsAtQmax { get; } // true when the bus was switched PV→PQ at its reactive ceiling
-    public bool   IsAtQmin { get; } // true when the bus was switched PV→PQ at its reactive floor
+    public int BusId { get; }
+    public double Pg { get; } // MW   — dispatched real power (+ distributed-slack correction)
+    public double Qg { get; } // MVAr — bus reactive output shared equally among bus generators
+    public bool IsAtQmax { get; } // true when the bus was switched PV→PQ at its reactive ceiling
+    public bool IsAtQmin { get; } // true when the bus was switched PV→PQ at its reactive floor
 
     public GeneratorResult(int busId, double pg, double qg, bool isAtQmax, bool isAtQmin)
     {
-        BusId    = busId;
-        Pg       = pg;
-        Qg       = qg;
+        BusId = busId;
+        Pg = pg;
+        Qg = qg;
         IsAtQmax = isAtQmax;
         IsAtQmin = isAtQmin;
     }
