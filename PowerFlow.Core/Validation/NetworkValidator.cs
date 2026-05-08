@@ -199,8 +199,9 @@ public static class NetworkValidator
                 errors.Add(
                     new ValidationError(
                         "INVALID_TAP_RATIO",
-                        $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is not positive. "
-                            + "This will cause division by zero in the Y-bus."
+                        $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is negative. "
+                            + "A zero tap ratio is normalised to 1.0 by the Branch constructor; "
+                            + "a negative value is a data error and will corrupt the Y-bus."
                     )
                 );
 

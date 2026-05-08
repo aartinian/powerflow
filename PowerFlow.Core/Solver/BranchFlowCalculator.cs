@@ -17,7 +17,7 @@ public static class BranchFlowCalculator
     /// </summary>
     public static IReadOnlyList<BranchFlow> Compute(PowerNetwork network, double[] Vm, double[] Va)
     {
-        var flows = new List<BranchFlow>();
+        var flows = new List<BranchFlow>(network.Branches.Count);
 
         foreach (var br in network.Branches)
         {

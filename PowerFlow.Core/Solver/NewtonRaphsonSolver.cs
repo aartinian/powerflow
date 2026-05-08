@@ -82,6 +82,15 @@ public class NewtonRaphsonSolver
     private void Warn(string msg) => Log?.LogWarning("{Message}", msg);
 
     /// <summary>
+    /// Convenience overload: builds the Y-bus from the network, then solves.
+    /// Use <see cref="Solve(PowerNetwork, SparseYbus)"/> directly when the topology is
+    /// fixed across multiple solves (sensitivity sweeps, parameter studies) to avoid
+    /// rebuilding the admittance matrix each time.
+    /// </summary>
+    public PowerFlowResult Solve(PowerNetwork network) =>
+        Solve(network, YBusBuilder.Build(network));
+
+    /// <summary>
     /// Solve the AC power flow for the given network using polar-form
     /// Newton-Raphson with sparse LU factorisation. The network must contain
     /// exactly one slack bus; validate first with <see cref="NetworkValidator"/>
@@ -97,20 +106,6 @@ public class NewtonRaphsonSolver
     /// <see cref="PowerFlowResult.Converged"/> to know whether the solution
     /// is trustworthy.
     /// </remarks>
-    /// <summary>
-    /// Convenience overload: builds the Y-bus from the network, then solves.
-    /// Use <see cref="Solve(PowerNetwork, SparseYbus)"/> directly when the topology is
-    /// fixed across multiple solves (sensitivity sweeps, parameter studies) to avoid
-    /// rebuilding the admittance matrix each time.
-    /// </summary>
-    public PowerFlowResult Solve(PowerNetwork network) =>
-        Solve(network, YBusBuilder.Build(network));
-
-    /// <summary>
-    /// Solve the AC power flow using a caller-supplied <paramref name="ybus"/>.
-    /// The Y-bus must have been built from <paramref name="network"/> by
-    /// <see cref="Network.YBusBuilder"/>; no consistency check is performed.
-    /// </summary>
     public PowerFlowResult Solve(PowerNetwork network, SparseYbus ybus)
     {
         int n = ybus.N;
@@ -120,7 +115,9 @@ public class NewtonRaphsonSolver
             throw new InvalidOperationException("Network has no slack bus.");
 
         var (Psch, Qsch) = BuildScheduledInjections(network);
-        var alpha = DistributedSlack ? BuildParticipationFactors(network) : Array.Empty<double>();
+        var (alpha, alphaCount) = DistributedSlack
+            ? BuildParticipationFactors(network)
+            : (Array.Empty<double>(), 0);
         double lambda = 0.0;
         var (Vm, Va) = BuildInitialState(network, FlatStart);
         var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
@@ -151,7 +148,7 @@ public class NewtonRaphsonSolver
         if (EnforceLimits)
             Info($"Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
         if (DistributedSlack)
-            Info($"Distributed slack ON  ({alpha.Count(a => a > 0)} participating bus(es))");
+            Info($"Distributed slack ON  ({alphaCount} participating bus(es))");
 
         bool limitViolated = false;
         int limitIter = 0;
@@ -473,6 +470,9 @@ public class NewtonRaphsonSolver
 
             if (enforceLimits)
             {
+                // ±∞ is the "no generator yet" sentinel used downstream by ApplyQLimitSwitches
+                // to mean "unconstrained". First gen at a bus replaces the sentinel; subsequent
+                // gens at the same bus accumulate additively (combined bus-level limit).
                 qMaxMvar[i] = double.IsPositiveInfinity(qMaxMvar[i])
                     ? gen.Qmax
                     : qMaxMvar[i] + gen.Qmax;
@@ -494,7 +494,9 @@ public class NewtonRaphsonSolver
     /// When no generator has Pmax &gt; 0 (degenerate case), α falls back to a uniform
     /// 1/n distribution so the augmented Jacobian remains non-singular.
     /// </summary>
-    private static double[] BuildParticipationFactors(PowerNetwork network)
+    private static (double[] alpha, int participantCount) BuildParticipationFactors(
+        PowerNetwork network
+    )
     {
         int n = network.Buses.Count;
         var alpha = new double[n];
@@ -507,7 +509,8 @@ public class NewtonRaphsonSolver
         else
             for (int i = 0; i < n; i++)
                 alpha[i] = 1.0 / n;
-        return alpha;
+        int participantCount = alpha.Count(a => a > 0);
+        return (alpha, participantCount);
     }
 
     // ── Q-limit enforcement ───────────────────────────────────────────────────

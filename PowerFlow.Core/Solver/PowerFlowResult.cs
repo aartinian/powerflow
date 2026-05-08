@@ -13,7 +13,7 @@ public class PowerFlowResult
 {
     public bool Converged { get; }
     public int Iterations { get; } // cumulative NR iterations across all outer Q-limit loops
-    public int OuterIterations { get; } // Q-limit outer loop count (0 when limits are off)
+    public int OuterIterations { get; } // Q-limit outer loop count; 0 only for trivially-solved networks (no NR equations)
     public double MaxMismatch { get; } // pu, mismatch at the last NR iteration
     public double[] Vm { get; } // pu, indexed by network.Buses order
     public double[] Va { get; } // degrees, indexed by network.Buses order

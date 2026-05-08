@@ -62,7 +62,7 @@ public class DcPowerFlowSolver
             if (Math.Abs(br.X) < 1e-10)
                 continue; // zero-reactance branch → skip
 
-            double tap = br.TapRatio > 0 ? br.TapRatio : 1.0;
+            double tap = br.TapRatio; // always ≥ 1.0: Branch constructor normalises 0 → 1.0
             double b = 1.0 / (tap * br.X);
             double phi = br.PhaseShift * Math.PI / 180.0; // radians
 
@@ -121,7 +121,7 @@ public class DcPowerFlowSolver
             if (f < 0 || t < 0)
                 continue;
 
-            double tap = br.TapRatio > 0 ? br.TapRatio : 1.0;
+            double tap = br.TapRatio; // always ≥ 1.0: Branch constructor normalises 0 → 1.0
             double b = Math.Abs(br.X) < 1e-10 ? 0.0 : 1.0 / (tap * br.X);
             double phi = br.PhaseShift * Math.PI / 180.0;
             double P = b * (theta[f] - theta[t] - phi);

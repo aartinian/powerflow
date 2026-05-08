@@ -48,12 +48,22 @@ for (int i = 0; i < args.Length; i++)
             noBranches = true;
             break;
         case "--tol":
-            if (++i < args.Length)
-                double.TryParse(args[i], NumberStyles.Float, CultureInfo.InvariantCulture, out tol);
+            if (++i < args.Length &&
+                !double.TryParse(args[i], NumberStyles.Float, CultureInfo.InvariantCulture, out tol))
+            {
+                Console.Error.WriteLine($"Warning: invalid --tol value '{args[i]}', using default 1e-6.");
+                tol = 1e-6;
+            }
             break;
         case "--max-iter":
             if (++i < args.Length)
-                int.TryParse(args[i], out maxIter);
+            {
+                if (!int.TryParse(args[i], out maxIter) || maxIter <= 0)
+                {
+                    Console.Error.WriteLine($"Warning: invalid --max-iter value '{args[i]}', using default 50.");
+                    maxIter = 50;
+                }
+            }
             break;
         default:
             if (!args[i].StartsWith("--"))
