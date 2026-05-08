@@ -12,6 +12,7 @@ bool flatStart = false;
 bool distSlack = false;
 bool dcMode = false;
 bool noLimits = false;
+bool warmStart = false;
 bool noColor = false;
 bool noBuses = false;
 bool noBranches = false;
@@ -27,6 +28,9 @@ for (int i = 0; i < args.Length; i++)
             break;
         case "--distributed-slack":
             distSlack = true;
+            break;
+        case "--warm-start":
+            warmStart = true;
             break;
         case "--dc":
             dcMode = true;
@@ -83,6 +87,7 @@ if (path is null)
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --flat-start          force Vm=1 pu, Va=0° initial guess");
+    Console.WriteLine("  --warm-start          seed AC Va from a DC solve before NR");
     Console.WriteLine("  --distributed-slack   spread imbalance by Pmax participation");
     Console.WriteLine("  --dc                  linearised DC power flow (single LU step)");
     Console.WriteLine("  --no-limits           disable Q-limit enforcement (PV→PQ switching)");
@@ -236,6 +241,7 @@ var result = new NewtonRaphsonSolver
     FlatStart = flatStart,
     DistributedSlack = distSlack,
     EnforceLimits = !noLimits,
+    WarmStartFromDc = warmStart,
     Tolerance = tol,
     MaxIterations = maxIter,
 }.Solve(net);

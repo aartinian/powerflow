@@ -40,7 +40,18 @@ public class DcPowerFlowResult
 
 /// <summary>
 /// Real-power flow (pu) on one DC branch.
-/// Positive means power flows from <see cref="FromBus"/> to
-/// <see cref="ToBus"/>.
+/// Positive means power flows from <see cref="FromBus"/> to <see cref="ToBus"/>.
 /// </summary>
-public readonly record struct DcBranchFlow(int FromBus, int ToBus, double P);
+public class DcBranchFlow
+{
+    public int FromBus { get; }
+    public int ToBus { get; }
+    public double P { get; } // pu — positive = from-end → to-end
+
+    public DcBranchFlow(int fromBus, int toBus, double p)
+    {
+        FromBus = fromBus;
+        ToBus = toBus;
+        P = p;
+    }
+}

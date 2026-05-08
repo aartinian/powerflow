@@ -221,6 +221,15 @@ public class NewtonRaphsonSolver
                         DistributedSlack ? alpha : null
                     );
                     var dx = SolveLinear(J, f);
+                    if (dx is null)
+                    {
+                        Warn(
+                            "Linear solve failed: Jacobian is singular. "
+                                + "Check for islanded buses or zero-impedance loops."
+                        );
+                        totalNrIters += iter + 1;
+                        break; // exits inner NR loop; converged stays false
+                    }
 
                     // Backtracking line search: find the largest μ = 2^{−k} that
                     // reduces ‖f‖∞. For well-conditioned networks μ = 1 on the first
@@ -838,11 +847,22 @@ public class NewtonRaphsonSolver
         return CompressedColumnStorage<double>.OfIndexed(triplets, true);
     }
 
-    private static double[] SolveLinear(CompressedColumnStorage<double> A, double[] b)
+    /// <summary>
+    /// Wraps CSparse sparse LU. Returns null when factorisation fails (singular Jacobian).
+    /// Callers must treat null as a non-convergence signal and break the NR loop.
+    /// </summary>
+    private static double[]? SolveLinear(CompressedColumnStorage<double> A, double[] b)
     {
-        var x = new double[b.Length];
-        SparseLU.Create(A, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(b, x);
-        return x;
+        try
+        {
+            var x = new double[b.Length];
+            SparseLU.Create(A, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(b, x);
+            return x;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null; // singular or ill-conditioned — caller reports non-convergence
+        }
     }
 
     private static PowerFlowResult MakeResult(

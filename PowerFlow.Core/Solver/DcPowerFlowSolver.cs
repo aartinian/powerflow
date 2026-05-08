@@ -102,7 +102,18 @@ public class DcPowerFlowSolver
         {
             var Bred = CompressedColumnStorage<double>.OfIndexed(bTrips, true);
             var thetaRed = new double[m];
-            SparseLU.Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(rhs, thetaRed);
+            try
+            {
+                SparseLU.Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(rhs, thetaRed);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                throw new InvalidOperationException(
+                    "DC power-flow solve failed: B′ matrix is singular. "
+                        + "Validate the network with NetworkValidator before solving.",
+                    ex
+                );
+            }
 
             for (int i = 0; i < n; i++)
                 if (busMap[i] >= 0)
