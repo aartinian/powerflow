@@ -8,15 +8,22 @@ namespace PowerFlow.Core.Network;
 /// </summary>
 public sealed class SparseYbus
 {
+    /// <summary>Number of buses (order of the admittance matrix).</summary>
     public int N { get; }
 
-    /// <summary>Real and imaginary parts of diagonal Y[i,i].</summary>
+    /// <summary>Real part of the diagonal admittance Y[i,i]: shunt conductance + Σ branch conductances.</summary>
     public double[] Gd { get; }
+
+    /// <summary>Imaginary part of the diagonal admittance Y[i,i]: shunt susceptance + Σ branch susceptances.</summary>
     public double[] Bd { get; }
 
-    /// <summary>Off-diagonal non-zeros: OffDiag[i] lists every j≠i where Y[i,j]≠0.</summary>
+    /// <summary>
+    /// Off-diagonal non-zeros. <c>OffDiag[i]</c> lists every j ≠ i for which Y[i,j] ≠ 0,
+    /// as (j, G_ij, B_ij) tuples. Enables O(nnz) injection and Jacobian loops.
+    /// </summary>
     public (int J, double G, double B)[][] OffDiag { get; }
 
+    /// <summary>Initializes a new sparse admittance matrix with the specified diagonal and off-diagonal structure.</summary>
     public SparseYbus(int n, double[] gd, double[] bd, (int J, double G, double B)[][] offDiag)
     {
         N = n;
