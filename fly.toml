@@ -1,0 +1,64 @@
+# fly.toml ─ Fly.io application config for PowerFlow.Web.
+#
+# After editing `app` to your preferred name, deploy with:
+#   flyctl auth login
+#   flyctl apps create powerflow-web      # only needed once
+#   flyctl deploy
+#
+# `flyctl launch` will accept this file directly; no further prompts.
+
+app = "powerflow-web"
+primary_region = "ams"                    # Amsterdam — closest to user
+
+# ─── Build ───────────────────────────────────────────────────────
+# Use the local Dockerfile rather than Fly's auto-detection.
+[build]
+  dockerfile = "Dockerfile"
+
+# ─── Runtime env ─────────────────────────────────────────────────
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_URLS = "http://+:8080"
+  # Prevent ASP.NET from chatting about HTTPS redirects when running
+  # behind Fly's TLS-terminating edge proxy.
+  ASPNETCORE_HTTPS_REDIRECTION = "false"
+
+# ─── HTTP service ────────────────────────────────────────────────
+# Blazor Server uses WebSockets for SignalR; Fly's http_service
+# handles ws/wss transparently over the same port.
+[http_service]
+  internal_port = 8080
+  force_https = true                      # Fly terminates TLS at the edge
+
+  # Auto-stop saves cost: the machine stops when idle and starts again
+  # on the next request (cold start ~1–2 s). For a single-user demo
+  # this is the right trade-off; bump min_machines_running to 1 if
+  # you'd rather keep it warm.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # Blazor Server holds a SignalR connection per browser tab.
+  # 200 hard / 100 soft is generous for a personal demo.
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 100
+
+  # Liveness probe — a GET / returns the empty-state page (HTML 200)
+  # so it's a good cheap health signal.
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/"
+
+# ─── Machine size ────────────────────────────────────────────────
+# 1 GB is comfortable for case300 (largest bundled IEEE case). Bump
+# if you load a much bigger network. Shared-CPU is plenty for a
+# single-user demo.
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
