@@ -41,11 +41,9 @@ RUN dotnet publish PowerFlow.Web/PowerFlow.Web.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Run as a non-root user. Fly's runtime is sandboxed already, but
-# defense-in-depth costs nothing and matches Microsoft's own guidance.
-RUN groupadd --system --gid 1000 app \
- && useradd  --system --uid 1000 --gid app app
-
+# The aspnet runtime image already provides a non-root `app` user (UID
+# 1000) since .NET 8 — recreating it collides with `useradd: UID already
+# exists` (exit 9). Just chown the copy and switch users.
 COPY --chown=app:app --from=build /app/publish ./
 USER app
 
