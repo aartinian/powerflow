@@ -120,4 +120,30 @@ public class SolverScaleTests
 
         Assert.Equal(vmRef, result.Vm[busIdx], 2); // ±0.005 pu
     }
+
+    /// <summary>
+    /// Performance guard: a case300 AC solve (flat start, Q-limits on) must complete
+    /// in under 500 ms on any modern development machine.
+    /// One warm-up run is performed first to exclude JIT compilation from the measurement.
+    /// </summary>
+    [Fact]
+    public void Solve_Case300_FlatStart_UnderTimeBudget()
+    {
+        const int BudgetMs = 500;
+        var net = MatpowerParser.ParseFile(TestData.Path("case300.m"));
+        var solver = new NewtonRaphsonSolver { FlatStart = true };
+
+        // Warm-up: exclude JIT overhead from the timing.
+        _ = solver.Solve(net);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = solver.Solve(net);
+        sw.Stop();
+
+        Assert.True(result.Converged, "case300 did not converge");
+        Assert.True(
+            sw.ElapsedMilliseconds < BudgetMs,
+            $"case300 solve took {sw.ElapsedMilliseconds} ms (budget: {BudgetMs} ms)"
+        );
+    }
 }

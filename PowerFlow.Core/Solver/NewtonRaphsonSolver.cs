@@ -783,13 +783,21 @@ public class NewtonRaphsonSolver
         var triplets = new CoordinateStorage<double>(dim, dim, capacity);
 
         // Off-diagonal: iterate Ybus non-zeros, emit up to 4 Jacobian entries per (i,j) pair.
+        // Rows are independent — each bus i writes only to its own P- and Q-block rows.
+        // Parallelise over rows for large networks; use sequential path for small ones where
+        // thread-pool overhead would dominate (threshold: 100 buses ≈ case57 and above).
+        var rowEntries = new List<(int Row, int Col, double Val)>[ybus.N];
         for (int i = 0; i < ybus.N; i++)
+            rowEntries[i] = new List<(int, int, double)>(ybus.OffDiag[i].Length * 4);
+
+        void FillRow(int i)
         {
             int pr = pvpqPos[i]; // row in P-block
             int qr = pqPos[i]; // row offset in Q-block
             if (pr < 0 && qr < 0)
-                continue; // slack bus — no Jacobian rows
+                return; // slack bus — no Jacobian rows
 
+            var list = rowEntries[i];
             foreach (var (j, Gij, Bij) in ybus.OffDiag[i])
             {
                 int tc = pvpqPos[j]; // col in θ-block
@@ -807,19 +815,30 @@ public class NewtonRaphsonSolver
                 if (pr >= 0)
                 {
                     if (tc >= 0)
-                        triplets.At(pr, tc, h); // H: ∂P_i/∂θ_j
+                        list.Add((pr, tc, h)); // H: ∂P_i/∂θ_j
                     if (vc >= 0)
-                        triplets.At(pr, npvpq + vc, nv); // N: Vj·∂P_i/∂Vj
+                        list.Add((pr, npvpq + vc, nv)); // N: Vj·∂P_i/∂Vj
                 }
                 if (qr >= 0)
                 {
                     if (tc >= 0)
-                        triplets.At(npvpq + qr, tc, -nv); // M: ∂Q_i/∂θ_j
+                        list.Add((npvpq + qr, tc, -nv)); // M: ∂Q_i/∂θ_j
                     if (vc >= 0)
-                        triplets.At(npvpq + qr, npvpq + vc, h); // L: Vj·∂Q_i/∂Vj
+                        list.Add((npvpq + qr, npvpq + vc, h)); // L: Vj·∂Q_i/∂Vj
                 }
             }
         }
+
+        if (ybus.N >= 100)
+            Parallel.For(0, ybus.N, FillRow);
+        else
+            for (int i = 0; i < ybus.N; i++)
+                FillRow(i);
+
+        // Merge per-row results into the shared triplet store (sequential — O(nnz), fast).
+        foreach (var list in rowEntries)
+            foreach (var (r, c, v) in list)
+                triplets.At(r, c, v);
 
         // Diagonal entries use accumulated P[i]/Q[i] and the diagonal admittance.
         for (int k = 0; k < npvpq; k++)
