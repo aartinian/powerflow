@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@using System.Globalization
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 @inject IJSRuntime JS
@@ -67,6 +68,60 @@
     </button>
 </div>
 
+<!-- ── Solver options ─────────────────────────────────── -->
+<div class="pf-options pf-panel mb-3">
+    <div class="pf-options-row">
+        <span class="pf-options-label">Mode</span>
+        <div class="pf-segmented" role="radiogroup" aria-label="Solver mode">
+            <button class="pf-seg @(mode == "ac" ? "active" : "")"
+                    @onclick='() => mode = "ac"'
+                    disabled="@busy"
+                    title="Polar-form Newton-Raphson with sparse LU">AC</button>
+            <button class="pf-seg @(mode == "dc" ? "active" : "")"
+                    @onclick='() => mode = "dc"'
+                    disabled="@busy"
+                    title="Linearised DC power flow (one sparse-LU step, lossless)">DC</button>
+        </div>
+
+        @if (mode == "ac")
+        {
+            <span class="pf-options-sep" aria-hidden="true"></span>
+            <span class="pf-options-label">Solver</span>
+            <label class="pf-check" title="Override Vm/Va from the bus data with Vm=1 pu, Va=0°">
+                <input type="checkbox" @bind="optFlatStart" disabled="@busy" />
+                <span>Flat start</span>
+            </label>
+            <label class="pf-check" title="Enforce generator Q-limits via PV→PQ switching (outer loop)">
+                <input type="checkbox" @bind="optEnforceLimits" disabled="@busy" />
+                <span>Q-limits</span>
+            </label>
+            <label class="pf-check" title="Spread real-power imbalance λ across generators by Pmax">
+                <input type="checkbox" @bind="optDistSlack" disabled="@busy" />
+                <span>Distributed slack</span>
+            </label>
+            <label class="pf-check" title="Seed AC voltage angles from a DC pre-solve">
+                <input type="checkbox" @bind="optWarmStart" disabled="@busy" />
+                <span>DC warm-start</span>
+            </label>
+        }
+    </div>
+
+    @if (mode == "ac")
+    {
+        <div class="pf-options-row">
+            <span class="pf-options-label">Tolerance</span>
+            <input type="text" class="pf-num-input" @bind="optToleranceStr"
+                   disabled="@busy" placeholder="1e-6"
+                   title="Convergence criterion in pu (max(|ΔP|,|ΔQ|))" />
+            <span class="pf-options-sep" aria-hidden="true"></span>
+            <span class="pf-options-label">Max iter</span>
+            <input type="number" class="pf-num-input" @bind="optMaxIter"
+                   disabled="@busy" min="1" max="500"
+                   title="Cap on inner Newton-Raphson iterations per outer pass" />
+        </div>
+    }
+</div>
+
 @if (error is not null)
 {
     <div class="pf-banner pf-fail mb-3">@error</div>
@@ -130,27 +185,63 @@
 }
 
 <!-- ── Idle state ──────────────────────────────────────── -->
-@if (!busy && logLines.Count == 0 && result is null)
+@if (!busy && logLines.Count == 0 && result is null && dcResult is null)
 {
     <div class="pf-empty">
         <div class="pf-empty-inner">
             <div class="pf-empty-glyph" aria-hidden="true">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                @* Mirror the brand mark — three-node triangle, but larger and softer. *@
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="4" y2="19" />
+                    <line x1="12" y1="5" x2="20" y2="19" />
+                    <line x1="4" y1="19" x2="20" y2="19" />
+                    <circle cx="12" cy="5"  r="2.4" fill="currentColor" stroke="none" />
+                    <circle cx="4"  cy="19" r="2.4" fill="currentColor" stroke="none" />
+                    <circle cx="20" cy="19" r="2.4" fill="currentColor" stroke="none" />
                 </svg>
             </div>
             <h2 class="pf-empty-title">Ready to solve</h2>
             <p class="pf-empty-sub">
-                Upload a MATPOWER <code>.m</code> case file above, then click <strong>Run solver</strong>.
+                Pick a sample case above, or upload a MATPOWER <code>.m</code> file.
             </p>
-            <p class="pf-empty-hint">Validated on IEEE 14, 30, 57, 118, and 300-bus test cases.</p>
+            <div class="pf-empty-chips" aria-label="Capabilities">
+                <span class="pf-empty-chip">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    AC Newton-Raphson + DC linearised
+                </span>
+                <span class="pf-empty-chip">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Q-limits · Distributed slack · DC warm-start
+                </span>
+                <span class="pf-empty-chip">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Sparse LU (CSparse) · 194 tests
+                </span>
+                <span class="pf-empty-chip">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Validated on IEEE 14 / 30 / 57 / 118 / 300
+                </span>
+            </div>
         </div>
     </div>
 }
 
 <!-- ── Workspace ───────────────────────────────────────── -->
-@if (busy || logLines.Count > 0 || result is not null)
+@if (busy || logLines.Count > 0 || result is not null || dcResult is not null)
 {
     <!-- ── Solver log (top drawer) ────────────────────── -->
     <div class="pf-log-panel pf-panel mb-3">
@@ -186,48 +277,70 @@
         }
     </div>
 
-    @if (busy && result is null)
+    @if (busy && result is null && dcResult is null)
     {
         <div class="pf-solving-placeholder mb-3">
             <span class="pf-spinner pf-spinner-lg" aria-hidden="true"></span>
-            <span>Running Newton-Raphson…</span>
+            <span>@(mode == "dc" ? "Running DC power flow…" : "Running Newton-Raphson…")</span>
         </div>
     }
 
     @if (result is not null && network is not null)
     {
-        <!-- Status card -->
-        <div class="pf-status-card @(result.Converged ? "pf-status-ok" : "pf-status-fail") mb-3">
-            <div class="pf-status-icon">
-                @if (result.Converged)
-                {
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                }
-                else
-                {
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                }
-            </div>
-            <div class="pf-status-body">
-                <div class="pf-status-title">@(result.Converged ? "Converged" : "Did not converge")</div>
-                <div class="pf-status-meta">
-                    @result.Iterations iteration@(result.Iterations == 1 ? "" : "s")
+        <!-- ── Status card (hero result) ──────────────────── -->
+        @* Confident, data-forward layout: state pill on the left, big tabular     *@
+        @* iteration count as the headline, supporting metrics on the right.       *@
+        <div class="pf-hero @(result.Converged ? "pf-hero-ok" : "pf-hero-fail") mb-3">
+            <div class="pf-hero-row">
+                <div class="pf-hero-pill">
+                    @if (result.Converged)
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>Converged</span>
+                    }
+                    else
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        <span>Did not converge</span>
+                    }
+                </div>
+                <div class="pf-hero-headline">
+                    <span class="pf-hero-num">@result.Iterations</span>
+                    <span class="pf-hero-num-lbl">iteration@(result.Iterations == 1 ? "" : "s")</span>
                     @if (result.OuterIterations > 1)
                     {
-                        <text>&thinsp;·&thinsp; @result.OuterIterations outer pass@(result.OuterIterations == 1 ? "" : "es")</text>
+                        <span class="pf-hero-divider"></span>
+                        <span class="pf-hero-num pf-hero-num-sm">@result.OuterIterations</span>
+                        <span class="pf-hero-num-lbl">outer pass@(result.OuterIterations == 1 ? "" : "es")</span>
                     }
-                    &thinsp;·&thinsp;
-                    max mismatch @result.MaxMismatch.ToString("e2") pu
-                    &thinsp;·&thinsp;
-                    @network.Buses.Count buses &thinsp;/&thinsp; @result.BranchFlows.Count branches &thinsp;/&thinsp; @network.Generators.Count generators
+                </div>
+                <div class="pf-hero-stats">
+                    <div class="pf-hero-stat">
+                        <span class="pf-hero-stat-lbl">max |f|</span>
+                        <code class="pf-hero-stat-val">@result.MaxMismatch.ToString("e2") pu</code>
+                    </div>
+                    <div class="pf-hero-stat">
+                        <span class="pf-hero-stat-lbl">network</span>
+                        <span class="pf-hero-stat-val">@network.Buses.Count·@result.BranchFlows.Count·@network.Generators.Count</span>
+                    </div>
                 </div>
             </div>
+            @if (optDistSlack)
+            {
+                var lambdaMw = result.Lambda * network.BaseMva;
+                <div class="pf-hero-extra">
+                    <span class="pf-pill pf-pill-accent" title="Distributed-slack imbalance shared across all generators by Pmax participation">
+                        λ = @($"{lambdaMw:+0.000;-0.000;0.000} MW")
+                    </span>
+                    <span class="pf-cell-muted">@($"{result.Lambda:+0.00000;-0.00000;0.00000} pu on {network.BaseMva:F0} MVA base")</span>
+                </div>
+            }
         </div>
 
         @if (result.VoltageViolations.Count > 0)
@@ -322,123 +435,6 @@
             </div>
         }
 
-        <!-- ── Network diagram (standalone) ──────────── -->
-        <div class="pf-panel mb-3">
-            <div class="pf-section-head">
-                <span class="pf-section-title">Network Diagram</span>
-                <span class="pf-section-meta">
-                    @network.Buses.Count buses &thinsp;·&thinsp; @result.BranchFlows.Count branches
-                    @if (network.Buses.Count > 100)
-                    {
-                        <span class="pf-section-note">&thinsp;· random layout for large cases</span>
-                    }
-                </span>
-                <button class="pf-icon-btn ms-auto" @onclick="ResetZoom" title="Reset zoom">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="15 3 21 3 21 9"/>
-                        <polyline points="9 21 3 21 3 15"/>
-                        <line x1="21" y1="3" x2="14" y2="10"/>
-                        <line x1="3" y1="21" x2="10" y2="14"/>
-                    </svg>
-                    Reset zoom
-                </button>
-            </div>
-            @if (_diagramError is not null)
-            {
-                <div class="pf-banner pf-fail m-2 mt-0">@_diagramError</div>
-            }
-            <div class="pf-diagram-wrap">
-                <div @ref="_diagramContainer" class="pf-diagram"></div>
-                @if (_popover is { } p)
-                {
-                    <div class="pf-node-popover">
-                        <div class="pf-npo-head">
-                            <span class="pf-npo-title">Bus @p.BusId</span>
-                            <span class="pf-bus-chip pf-bus-@p.TypeCss">@p.TypeLabel</span>
-                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="pf-npo-grid">
-                            <span class="pf-npo-lbl">Vm</span>
-                            <span class="pf-npo-val @VmClass(p.Vm)">@p.Vm.ToString("F4") pu</span>
-                            <span class="pf-npo-lbl">Va</span>
-                            <span class="pf-npo-val">@p.Va.ToString("F3")°</span>
-                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
-                            <span class="pf-npo-lbl">Pg</span>
-                            <span class="pf-npo-val">@Fmt(p.Pg) MW</span>
-                            <span class="pf-npo-lbl">Qg</span>
-                            <span class="pf-npo-val">@Fmt(p.Qg) MVAr</span>
-                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
-                            <span class="pf-npo-lbl">Pd</span>
-                            <span class="pf-npo-val">@Fmt(p.Pd) MW</span>
-                            <span class="pf-npo-lbl">Qd</span>
-                            <span class="pf-npo-val">@Fmt(p.Qd) MVAr</span>
-                        </div>
-                    </div>
-                }
-                @if (_branchPopover is { } b)
-                {
-                    <div class="pf-node-popover">
-                        <div class="pf-npo-head">
-                            <span class="pf-npo-title">@b.FromBusId &thinsp;→&thinsp; @b.ToBusId</span>
-                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="pf-npo-grid">
-                            <span class="pf-npo-lbl">P_ij</span>
-                            <span class="pf-npo-val">@Fmt(b.Pij) MW</span>
-                            <span class="pf-npo-lbl">Q_ij</span>
-                            <span class="pf-npo-val">@Fmt(b.Qij) MVAr</span>
-                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
-                            <span class="pf-npo-lbl">P_ji</span>
-                            <span class="pf-npo-val">@Fmt(b.Pji) MW</span>
-                            <span class="pf-npo-lbl">Q_ji</span>
-                            <span class="pf-npo-val">@Fmt(b.Qji) MVAr</span>
-                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
-                            <span class="pf-npo-lbl">Loss</span>
-                            <span class="pf-npo-val">@Fmt(b.LossMW) MW</span>
-                            <span class="pf-npo-lbl">Loading</span>
-                            <span class="pf-npo-val @LoadClass(b.LoadingPct)">
-                                @(double.IsNaN(b.LoadingPct) ? "—" : b.LoadingPct.ToString("F1") + "%")
-                            </span>
-                        </div>
-                    </div>
-                }
-            </div>
-            <div class="pf-legend">
-                <span class="pf-legend-label">Buses</span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-dot" style="background:#22c55e"></span>0.95–1.05 pu
-                </span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-dot" style="background:#f59e0b"></span>Over-voltage
-                </span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-dot" style="background:#ef4444"></span>Under-voltage
-                </span>
-                <span class="pf-legend-sep"></span>
-                <span class="pf-legend-label">Branches</span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-line" style="background:#22c55e"></span>&lt;70%
-                </span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-line" style="background:#f59e0b"></span>70–90%
-                </span>
-                <span class="pf-legend-item">
-                    <span class="pf-legend-line" style="background:#ef4444"></span>≥90%
-                </span>
-            </div>
-        </div>
-
         <!-- ── Data tables ────────────────────────────── -->
         <div class="pf-panel mb-3">
             <div class="pf-tabs">
@@ -523,16 +519,22 @@
                 }
                 else
                 {
-                    // Index in-service generator results by bus ID so we can highlight
-                    // PV→PQ-switched buses in the table. Multiple generators on the same
-                    // bus share a bus-level Q limit, so they all get the same badge.
-                    var genResultByBus = result.Generators.ToDictionary(g => g.BusId);
+                    // Pair input generators with solver-side GeneratorResults by index alignment.
+                    // Core builds one GeneratorResult per in-service generator in input order, so
+                    // walking the in-service subset of network.Generators in order matches.
+                    // This works correctly even with multiple generators on the same bus.
+                    var inSvcResults = result.Generators;
+                    int gri = 0;
                     <table class="table table-sm pf-tbl mb-0">
                         <thead><tr>
                             <th>#</th>
                             <th>Bus</th>
                             <th class="text-end">Vg (pu)</th>
                             <th class="text-end">Pg (MW)</th>
+                            @if (optDistSlack)
+                            {
+                                <th class="text-end" title="Distributed-slack correction = α_i · λ · BaseMVA">Δ (MW)</th>
+                            }
                             <th class="text-end">Pg_min</th>
                             <th class="text-end">Pg_max</th>
                             <th class="text-end">Qg (MVAr)</th>
@@ -546,12 +548,24 @@
                             {
                                 var gen = network.Generators[i];
                                 var busIdx = network.IndexOf(gen.BusId);
-                                genResultByBus.TryGetValue(gen.BusId, out var gr);
+                                GeneratorResult? gr = null;
+                                if (gen.IsInService && gri < inSvcResults.Count)
+                                {
+                                    gr = inSvcResults[gri];
+                                    gri++;
+                                }
                                 <tr>
                                     <td class="pf-cell-muted">@(i + 1)</td>
                                     <td>@gen.BusId</td>
                                     <td class="text-end">@gen.Vg.ToString("F4")</td>
-                                    <td class="text-end">@Fmt(gen.Pg)</td>
+                                    <td class="text-end">@Fmt(gr is null ? gen.Pg : gr.Pg)</td>
+                                    @if (optDistSlack)
+                                    {
+                                        var delta = gr is null ? 0.0 : gr.Pg - gen.Pg;
+                                        <td class="text-end @(Math.Abs(delta) >= 0.05 ? "" : "pf-cell-muted")">
+                                            @(delta >= 0 ? $"+{delta:F3}" : $"{delta:F3}")
+                                        </td>
+                                    }
                                     <td class="text-end pf-cell-muted">@Fmt(gen.Pmin)</td>
                                     <td class="text-end pf-cell-muted">@Fmt(gen.Pmax)</td>
                                     <td class="text-end">@Fmt(result.Qg[busIdx] * network.BaseMva)</td>
@@ -586,6 +600,296 @@
         </div>
     }
 
+    @if (dcResult is not null && network is not null)
+    {
+        <!-- DC: always converges in one LU step. No Vm, no Q, no losses (model is lossless). -->
+        <div class="pf-hero pf-hero-ok pf-hero-dc mb-3">
+            <div class="pf-hero-row">
+                <div class="pf-hero-pill">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span>DC solved</span>
+                </div>
+                <div class="pf-hero-headline">
+                    <span class="pf-hero-num">1</span>
+                    <span class="pf-hero-num-lbl">LU step</span>
+                    <span class="pf-hero-divider"></span>
+                    <span class="pf-hero-num-lbl pf-hero-num-lbl-em">linearised B′θ = P</span>
+                </div>
+                <div class="pf-hero-stats">
+                    <div class="pf-hero-stat">
+                        <span class="pf-hero-stat-lbl">network</span>
+                        <span class="pf-hero-stat-val">@network.Buses.Count·@dcResult.BranchFlows.Count·@network.Generators.Count</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compact DC metrics: Pg total, Pd total. Losses are zero by construction. -->
+        <div class="pf-metrics pf-panel mb-3">
+            <div class="pf-metric">
+                <div class="pf-metric-row">
+                    <span class="pf-metric-num">@Fmt(DcGenMw())</span>
+                    <span class="pf-metric-unit">MW</span>
+                </div>
+                <div class="pf-metric-lbl">Generation</div>
+            </div>
+            <div class="pf-metric">
+                <div class="pf-metric-row">
+                    <span class="pf-metric-num">@Fmt(DcLoadMw())</span>
+                    <span class="pf-metric-unit">MW</span>
+                </div>
+                <div class="pf-metric-lbl">Load</div>
+            </div>
+            <div class="pf-metric">
+                <div class="pf-metric-row">
+                    <span class="pf-metric-num">0.0</span>
+                    <span class="pf-metric-unit">MW</span>
+                </div>
+                <div class="pf-metric-lbl">Losses (lossless DC)</div>
+            </div>
+            <div class="pf-metric">
+                <div class="pf-metric-row">
+                    <span class="pf-metric-num">@DcPeakAngle().ToString("F2")</span>
+                    <span class="pf-metric-unit">°</span>
+                </div>
+                <div class="pf-metric-lbl">Max |Va|</div>
+            </div>
+        </div>
+
+        <!-- DC tables: angles only, branch flows are real-power only. -->
+        <div class="pf-panel mb-3">
+            <div class="pf-tabs">
+                <button class="pf-tab @(tab == "buses" ? "active" : "")"
+                        @onclick='() => tab = "buses"'>
+                    Buses <span class="pf-tab-count">@network.Buses.Count</span>
+                </button>
+                <button class="pf-tab @(tab == "branches" ? "active" : "")"
+                        @onclick='() => tab = "branches"'>
+                    Branches <span class="pf-tab-count">@dcResult.BranchFlows.Count</span>
+                </button>
+            </div>
+
+            <div class="pf-tbl-wrap">
+                @if (tab == "buses")
+                {
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>Bus</th>
+                            <th>Type</th>
+                            <th class="text-end">Va (°)</th>
+                            <th class="text-end">Pg (MW)</th>
+                            <th class="text-end">Pd (MW)</th>
+                        </tr></thead>
+                        <tbody>
+                            @for (int i = 0; i < network.Buses.Count; i++)
+                            {
+                                var bus = network.Buses[i];
+                                <tr>
+                                    <td>@bus.Id</td>
+                                    <td><span class="pf-bus-chip pf-bus-@bus.Type.ToString().ToLowerInvariant()">@bus.Type</span></td>
+                                    <td class="text-end">@dcResult.Va[i].ToString("F3")</td>
+                                    <td class="text-end">@Fmt(dcResult.Pg[i] * network.BaseMva)</td>
+                                    <td class="text-end">@bus.Pd.ToString("F1")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    <table class="table table-sm pf-tbl mb-0">
+                        <thead><tr>
+                            <th>From</th>
+                            <th>To</th>
+                            <th class="text-end">P (MW)</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var bf in dcResult.BranchFlows)
+                            {
+                                <tr>
+                                    <td>@bf.FromBus</td>
+                                    <td>@bf.ToBus</td>
+                                    <td class="text-end">@Fmt(bf.P * network.BaseMva)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Network diagram (shared between AC and DC) ────────── *@
+    @* Hoisted out of the AC-only block so the same DOM node persists across mode    *@
+    @* switches. Without this, switching AC→DC→AC would unmount/remount the diagram  *@
+    @* container, which intermittently crashed Cytoscape (n.className on null).      *@
+    @if ((result is not null || dcResult is not null) && network is not null)
+    {
+        var diagBranchCount = result is not null ? result.BranchFlows.Count : (dcResult?.BranchFlows.Count ?? 0);
+        var diagIsDc = dcResult is not null;
+        <div class="pf-panel mb-3">
+            <div class="pf-section-head">
+                <span class="pf-section-title">Network Diagram</span>
+                <span class="pf-section-meta">
+                    @network.Buses.Count buses &thinsp;·&thinsp; @diagBranchCount branches
+                    @if (diagIsDc)
+                    {
+                        <span class="pf-section-note">&thinsp;· DC: bus tone = |Va| deviation</span>
+                    }
+                    @if (network.Buses.Count > 100)
+                    {
+                        <span class="pf-section-note">&thinsp;· random layout for large cases</span>
+                    }
+                </span>
+                <button class="pf-icon-btn ms-auto" @onclick="ResetZoom" title="Reset zoom">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="15 3 21 3 21 9"/>
+                        <polyline points="9 21 3 21 3 15"/>
+                        <line x1="21" y1="3" x2="14" y2="10"/>
+                        <line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                    Reset zoom
+                </button>
+            </div>
+            @if (_diagramError is not null)
+            {
+                <div class="pf-banner pf-fail m-2 mt-0">@_diagramError</div>
+            }
+            <div class="pf-diagram-wrap">
+                <div @ref="_diagramContainer" class="pf-diagram"></div>
+                @if (_popover is { } p)
+                {
+                    <div class="pf-node-popover">
+                        <div class="pf-npo-head">
+                            <span class="pf-npo-title">Bus @p.BusId</span>
+                            <span class="pf-bus-chip pf-bus-@p.TypeCss">@p.TypeLabel</span>
+                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="pf-npo-grid">
+                            @if (p.Vm is { } vm)
+                            {
+                                <span class="pf-npo-lbl">Vm</span>
+                                <span class="pf-npo-val @VmClass(vm)">@vm.ToString("F4") pu</span>
+                            }
+                            <span class="pf-npo-lbl">Va</span>
+                            <span class="pf-npo-val">@p.Va.ToString("F3")°</span>
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">Pg</span>
+                            <span class="pf-npo-val">@Fmt(p.Pg) MW</span>
+                            @if (p.Qg is { } qg)
+                            {
+                                <span class="pf-npo-lbl">Qg</span>
+                                <span class="pf-npo-val">@Fmt(qg) MVAr</span>
+                            }
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            <span class="pf-npo-lbl">Pd</span>
+                            <span class="pf-npo-val">@Fmt(p.Pd) MW</span>
+                            @if (p.Qd is { } qd)
+                            {
+                                <span class="pf-npo-lbl">Qd</span>
+                                <span class="pf-npo-val">@Fmt(qd) MVAr</span>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (_branchPopover is { } b)
+                {
+                    <div class="pf-node-popover">
+                        <div class="pf-npo-head">
+                            <span class="pf-npo-title">@b.FromBusId &thinsp;→&thinsp; @b.ToBusId</span>
+                            <button class="pf-npo-close" @onclick="ClosePopover" title="Close">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="pf-npo-grid">
+                            <span class="pf-npo-lbl">P_ij</span>
+                            <span class="pf-npo-val">@Fmt(b.Pij) MW</span>
+                            @if (b.Qij is { } qij)
+                            {
+                                <span class="pf-npo-lbl">Q_ij</span>
+                                <span class="pf-npo-val">@Fmt(qij) MVAr</span>
+                            }
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            @if (b.Pji is { } pji)
+                            {
+                                <span class="pf-npo-lbl">P_ji</span>
+                                <span class="pf-npo-val">@Fmt(pji) MW</span>
+                            }
+                            @if (b.Qji is { } qji)
+                            {
+                                <span class="pf-npo-lbl">Q_ji</span>
+                                <span class="pf-npo-val">@Fmt(qji) MVAr</span>
+                            }
+                            @if (b.Qij is null && b.Pji is null)
+                            {
+                                <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            }
+                            <span class="pf-npo-sep"></span><span class="pf-npo-sep"></span>
+                            @if (b.LossMW is { } loss)
+                            {
+                                <span class="pf-npo-lbl">Loss</span>
+                                <span class="pf-npo-val">@Fmt(loss) MW</span>
+                            }
+                            <span class="pf-npo-lbl">Loading</span>
+                            <span class="pf-npo-val @LoadClass(b.LoadingPct)">
+                                @(double.IsNaN(b.LoadingPct) ? "—" : b.LoadingPct.ToString("F1") + "%")
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="pf-legend">
+                <span class="pf-legend-label">Buses</span>
+                @if (diagIsDc)
+                {
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#22c55e"></span>|Va| &lt; 15°
+                    </span>
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#f59e0b"></span>15–30°
+                    </span>
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#ef4444"></span>≥ 30°
+                    </span>
+                }
+                else
+                {
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#22c55e"></span>0.95–1.05 pu
+                    </span>
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#f59e0b"></span>Over-voltage
+                    </span>
+                    <span class="pf-legend-item">
+                        <span class="pf-legend-dot" style="background:#ef4444"></span>Under-voltage
+                    </span>
+                }
+                <span class="pf-legend-sep"></span>
+                <span class="pf-legend-label">Branches</span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#22c55e"></span>&lt;70%
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#f59e0b"></span>70–90%
+                </span>
+                <span class="pf-legend-item">
+                    <span class="pf-legend-line" style="background:#ef4444"></span>≥90%
+                </span>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -596,17 +900,21 @@
         double VmMin, double VmMax, double MaxLoadPct,
         int NSlack, int NPv, int NPq);
 
+    // Vm/Qg/Qd are nullable so the same record serves both AC (full data) and DC
+    // (no voltage magnitude or reactive power in the linearised model).
     record PopoverBus(
         int BusId, string TypeLabel, string TypeCss,
-        double Vm, double Va,
-        double Pg, double Qg,
-        double Pd, double Qd);
+        double? Vm, double Va,
+        double Pg, double? Qg,
+        double Pd, double? Qd);
 
+    // Qij/Pji/Qji/LossMW nullable for the same reason — DC reports a single
+    // real-power flow per branch, with no reactive component and zero losses.
     record PopoverBranch(
         int FromBusId, int ToBusId,
-        double Pij, double Qij,
-        double Pji, double Qji,
-        double LossMW, double LoadingPct);
+        double Pij, double? Qij,
+        double? Pji, double? Qji,
+        double? LossMW, double LoadingPct);
 
     static readonly CaseMeta[] Cases =
     [
@@ -621,8 +929,18 @@
     string? fileContent;
     bool busy;
     string? error;
+    DcPowerFlowResult? dcResult;
     List<ValidationError> validationErrors = [];
     List<ValidationError> validationWarnings = [];
+
+    // Solver options (mirrors NewtonRaphsonSolver init properties)
+    string mode = "ac";                         // "ac" | "dc"
+    bool optFlatStart = false;
+    bool optEnforceLimits = true;
+    bool optDistSlack = false;
+    bool optWarmStart = false;
+    string optToleranceStr = "1e-6";
+    int optMaxIter = 50;
     string tab = "buses";
     bool logCollapsed = true;
     PowerNetwork? network;
@@ -685,6 +1003,7 @@
         busy = true;
         error = null;
         result = null;
+        dcResult = null;
         _metrics = null;
         _popover = null;
         _branchPopover = null;
@@ -719,11 +1038,39 @@
             if (validationErrors.Count > 0)
                 return; // workspace stays empty; the validation panel is visible
 
-            var res = await Task.Run(() => new NewtonRaphsonSolver { Log = logger }.Solve(net));
-            network = net;
-            result = res;
-            _shouldRenderDiagram = true;
-            _metrics = null; // invalidate lazy cache so Metrics recomputes from new result/network
+            if (mode == "dc")
+            {
+                // DC has no convergence loop and no init options — one sparse-LU step.
+                var dc = await Task.Run(() => new DcPowerFlowSolver().Solve(net));
+                network = net;
+                dcResult = dc;
+                _shouldRenderDiagram = true;
+            }
+            else
+            {
+                // Tolerance accepts scientific notation ("1e-6") or fixed ("0.000001"). Bad input
+                // silently falls back to the MATPOWER default — surfacing that in the UI is more
+                // friction than it's worth for an obvious user-typo case.
+                if (!double.TryParse(optToleranceStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var tol)
+                    || tol <= 0)
+                    tol = 1e-6;
+
+                var solver = new NewtonRaphsonSolver
+                {
+                    Log              = logger,
+                    Tolerance        = tol,
+                    MaxIterations    = Math.Clamp(optMaxIter, 1, 500),
+                    FlatStart        = optFlatStart,
+                    EnforceLimits    = optEnforceLimits,
+                    DistributedSlack = optDistSlack,
+                    WarmStartFromDc  = optWarmStart,
+                };
+                var res = await Task.Run(() => solver.Solve(net));
+                network = net;
+                result = res;
+                _shouldRenderDiagram = true;
+                _metrics = null; // invalidate lazy cache so Metrics recomputes from new result/network
+            }
         }
         catch (Exception ex)
         {
@@ -744,22 +1091,59 @@
             shouldScroll = false;
             await JS.InvokeVoidAsync("scrollToBottom", logPanel);
         }
-        if (_shouldRenderDiagram && result is not null && network is not null)
+        if (_shouldRenderDiagram && network is not null && (result is not null || dcResult is not null))
         {
             _shouldRenderDiagram = false;
             try
             {
                 _diagramModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./diagram.js");
                 _dotNetRef ??= DotNetObjectReference.Create(this);
-                var busData = network.Buses.Select((b, i) => new {
-                    id = b.Id, vm = result.Vm[i], busType = (int)b.Type
-                }).ToArray();
-                var branchData = result.BranchFlows.Select(bf => new {
-                    fromBusId = bf.FromBusId,
-                    toBusId   = bf.ToBusId,
-                    loadingPct = double.IsNaN(bf.LoadingPct) ? (double?)null : bf.LoadingPct
-                }).ToArray();
-                await _diagramModule.InvokeVoidAsync("render", _diagramContainer, busData, branchData, _dotNetRef);
+
+                object[] busData;
+                object[] branchData;
+                string diagMode;
+
+                if (dcResult is not null)
+                {
+                    diagMode = "dc";
+                    // DC: voltages are 1 pu by assumption — colour by |Va| deviation
+                    // bucketed into a 0/1/2 tone the JS layer maps to green/amber/red.
+                    busData = network.Buses.Select((b, i) =>
+                    {
+                        double absVa = Math.Abs(dcResult.Va[i]);
+                        int tone = absVa >= 30 ? 2 : absVa >= 15 ? 1 : 0;
+                        return (object)new { id = b.Id, vm = (double?)null, vmTone = (int?)tone, busType = (int)b.Type };
+                    }).ToArray();
+
+                    // DC branches: loading from |P|*BaseMva / RateA when RateA > 0.
+                    // RateA lives on the input branch (in MVA); pair by index since
+                    // DcBranchFlow keeps the order of in-service branches.
+                    var inSvcBranches = network.Branches.Where(b => b.IsInService).ToList();
+                    var mva = network.BaseMva;
+                    branchData = dcResult.BranchFlows.Select((bf, i) =>
+                    {
+                        double rateA = i < inSvcBranches.Count ? inSvcBranches[i].RateA : 0.0;
+                        double? pct = rateA > 0 ? Math.Abs(bf.P) * mva / rateA * 100.0 : (double?)null;
+                        return (object)new { fromBusId = bf.FromBus, toBusId = bf.ToBus, loadingPct = pct };
+                    }).ToArray();
+                }
+                else
+                {
+                    diagMode = "ac";
+                    busData = network.Buses.Select((b, i) =>
+                        (object)new { id = b.Id, vm = (double?)result!.Vm[i], vmTone = (int?)null, busType = (int)b.Type }
+                    ).ToArray();
+                    branchData = result!.BranchFlows.Select(bf =>
+                        (object)new {
+                            fromBusId = bf.FromBusId,
+                            toBusId   = bf.ToBusId,
+                            loadingPct = double.IsNaN(bf.LoadingPct) ? (double?)null : bf.LoadingPct
+                        }
+                    ).ToArray();
+                }
+
+                await _diagramModule.InvokeVoidAsync(
+                    "render", _diagramContainer, busData, branchData, _dotNetRef, diagMode);
             }
             catch (Exception ex)
             {
@@ -772,41 +1156,90 @@
     [JSInvokable]
     public Task OnNodeTap(int busId)
     {
-        if (network is null || result is null) return Task.CompletedTask;
+        if (network is null) return Task.CompletedTask;
         var idx = network.IndexOf(busId);
         if (idx < 0) return Task.CompletedTask;
         var bus = network.Buses[idx];
         _branchPopover = null;
-        _popover = new PopoverBus(
-            BusId:     busId,
-            TypeLabel: bus.Type.ToString(),
-            TypeCss:   bus.Type.ToString().ToLowerInvariant(),
-            Vm: result.Vm[idx],
-            Va: result.Va[idx],
-            Pg: result.Pg[idx] * network.BaseMva,
-            Qg: result.Qg[idx] * network.BaseMva,
-            Pd: bus.Pd,
-            Qd: bus.Qd);
+
+        if (result is not null)
+        {
+            // AC: full voltage + reactive data.
+            _popover = new PopoverBus(
+                BusId:     busId,
+                TypeLabel: bus.Type.ToString(),
+                TypeCss:   bus.Type.ToString().ToLowerInvariant(),
+                Vm: result.Vm[idx],
+                Va: result.Va[idx],
+                Pg: result.Pg[idx] * network.BaseMva,
+                Qg: result.Qg[idx] * network.BaseMva,
+                Pd: bus.Pd,
+                Qd: bus.Qd);
+        }
+        else if (dcResult is not null)
+        {
+            // DC: angle + real-power only. Vm/Qg/Qd left null so the popover hides those rows.
+            _popover = new PopoverBus(
+                BusId:     busId,
+                TypeLabel: bus.Type.ToString(),
+                TypeCss:   bus.Type.ToString().ToLowerInvariant(),
+                Vm: null,
+                Va: dcResult.Va[idx],
+                Pg: dcResult.Pg[idx] * network.BaseMva,
+                Qg: null,
+                Pd: bus.Pd,
+                Qd: null);
+        }
+        else
+        {
+            return Task.CompletedTask;
+        }
         return InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
     public Task OnEdgeTap(int edgeIndex)
     {
-        if (result is null || network is null) return Task.CompletedTask;
-        if (edgeIndex < 0 || edgeIndex >= result.BranchFlows.Count) return Task.CompletedTask;
-        var bf  = result.BranchFlows[edgeIndex];
-        var mva = network.BaseMva;
+        if (network is null) return Task.CompletedTask;
         _popover = null;
-        _branchPopover = new PopoverBranch(
-            FromBusId:  bf.FromBusId,
-            ToBusId:    bf.ToBusId,
-            Pij:        bf.Pij * mva,
-            Qij:        bf.Qij * mva,
-            Pji:        bf.Pji * mva,
-            Qji:        bf.Qji * mva,
-            LossMW:     (bf.Pij + bf.Pji) * mva,
-            LoadingPct: bf.LoadingPct);
+        var mva = network.BaseMva;
+
+        if (result is not null)
+        {
+            if (edgeIndex < 0 || edgeIndex >= result.BranchFlows.Count) return Task.CompletedTask;
+            var bf = result.BranchFlows[edgeIndex];
+            _branchPopover = new PopoverBranch(
+                FromBusId:  bf.FromBusId,
+                ToBusId:    bf.ToBusId,
+                Pij:        bf.Pij * mva,
+                Qij:        bf.Qij * mva,
+                Pji:        bf.Pji * mva,
+                Qji:        bf.Qji * mva,
+                LossMW:     (bf.Pij + bf.Pji) * mva,
+                LoadingPct: bf.LoadingPct);
+        }
+        else if (dcResult is not null)
+        {
+            if (edgeIndex < 0 || edgeIndex >= dcResult.BranchFlows.Count) return Task.CompletedTask;
+            var bf = dcResult.BranchFlows[edgeIndex];
+            // Recover loading from input branch RateA (DC has no RateA in its result type).
+            var inSvcBranches = network.Branches.Where(b => b.IsInService).ToList();
+            double rateA = edgeIndex < inSvcBranches.Count ? inSvcBranches[edgeIndex].RateA : 0.0;
+            double pct = rateA > 0 ? Math.Abs(bf.P) * mva / rateA * 100.0 : double.NaN;
+            _branchPopover = new PopoverBranch(
+                FromBusId:  bf.FromBus,
+                ToBusId:    bf.ToBus,
+                Pij:        bf.P * mva,
+                Qij:        null,    // DC: no reactive
+                Pji:        null,    // DC: lossless, Pji = -Pij — omit to keep the popover compact
+                Qji:        null,
+                LossMW:     null,    // DC: lossless by construction
+                LoadingPct: pct);
+        }
+        else
+        {
+            return Task.CompletedTask;
+        }
         return InvokeAsync(StateHasChanged);
     }
 
@@ -838,6 +1271,11 @@
             await _diagramModule.DisposeAsync();
         _dotNetRef?.Dispose();
     }
+
+    // DC display helpers — computed inline to avoid the RZ1010 trap with @{ } in nested @if.
+    double DcGenMw() => dcResult is null || network is null ? 0 : dcResult.Pg.Sum() * network.BaseMva;
+    double DcLoadMw() => network is null ? 0 : network.Buses.Sum(b => b.Pd);
+    double DcPeakAngle() => dcResult is null ? 0 : dcResult.Va.Length == 0 ? 0 : dcResult.Va.Max(a => Math.Abs(a));
 
     static string Fmt(double v) => (Math.Abs(v) < 1e-4 ? 0.0 : v).ToString("F1");
     static string VmClass(double vm) => vm < 0.95 || vm > 1.05 ? "pf-cell-warn" : "";

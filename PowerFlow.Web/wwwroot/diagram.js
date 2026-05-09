@@ -10,17 +10,32 @@ function isDarkMode() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-export function render(container, buses, branches, dotNetRef) {
-    if (cy) { cy.destroy(); cy = null; }
+export function render(container, buses, branches, dotNetRef, mode) {
+    // Tear down any previous instance. Wrap in try/catch because destroy() can
+    // throw if its container was already detached from the DOM (which happens
+    // when Blazor unmounts the diagram block during mode switches).
+    if (cy) {
+        try { cy.destroy(); } catch (_) { /* swallow — old instance is dead either way */ }
+        cy = null;
+    }
+
+    // Bail out if the container isn't a live DOM element. Cytoscape's initRenderer
+    // reads container.className unconditionally; a null or detached node throws
+    // "null is not an object (evaluating 'n.className')" deep in the library.
+    if (!container || !container.parentNode || !container.isConnected) return;
+
     _dotNetRef = dotNetRef;
     _selectedId = null;
     _selectedEdgeIdx = null;
 
+    const isDc = mode === 'dc';
     const dark = isDarkMode();
     const n = buses.length;
 
     const nodes = buses.map(b => ({
-        data: { id: String(b.id), label: String(b.id), vm: b.vm, busType: b.busType }
+        // For AC, vm is the voltage magnitude (used by vmColor).
+        // For DC, vmTone is a pre-computed angle-deviation severity 0..2 used by dcColor.
+        data: { id: String(b.id), label: String(b.id), vm: b.vm, vmTone: b.vmTone, busType: b.busType }
     }));
 
     const edges = branches.map((br, i) => ({
@@ -46,7 +61,7 @@ export function render(container, buses, branches, dotNetRef) {
                 style: {
                     width: n > 100 ? 10 : n > 50 ? 14 : 18,
                     height: n > 100 ? 10 : n > 50 ? 14 : 18,
-                    'background-color': ele => vmColor(ele.data('vm')),
+                    'background-color': ele => isDc ? dcColor(ele.data('vmTone')) : vmColor(ele.data('vm')),
                     label: n <= 57 ? 'data(label)' : '',
                     'font-size': 8,
                     color: dark ? '#94a3b8' : '#334155',
@@ -161,5 +176,13 @@ function loadingColor(pct) {
     if (pct == null || isNaN(pct)) return '#94a3b8';
     if (pct >= 90) return '#ef4444';
     if (pct >= 70) return '#f59e0b';
+    return '#22c55e';
+}
+
+// DC: voltage magnitudes are 1 pu by assumption, so colour by |Va| deviation
+// from the slack instead. Severity passed in pre-bucketed: 0=fine, 1=watch, 2=stressed.
+function dcColor(tone) {
+    if (tone === 2) return '#ef4444';
+    if (tone === 1) return '#f59e0b';
     return '#22c55e';
 }

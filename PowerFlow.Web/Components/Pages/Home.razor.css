@@ -159,44 +159,77 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 48vh;
+    min-height: 50vh;
     padding: 2rem;
 }
-.pf-empty-inner { text-align: center; max-width: 380px; }
+.pf-empty-inner { text-align: center; max-width: 520px; }
 
 .pf-empty-glyph {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 64px; height: 64px;
-    background: var(--pf-empty-glyph-bg);
-    border-radius: 16px;
-    color: var(--pf-empty-glyph);
-    margin-bottom: 1.25rem;
+    width: 76px; height: 76px;
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--pf-accent) 14%, transparent),
+        color-mix(in srgb, var(--pf-accent) 4%, transparent));
+    border: 1px solid color-mix(in srgb, var(--pf-accent) 18%, transparent);
+    border-radius: 18px;
+    color: var(--pf-accent);
+    margin-bottom: 1.5rem;
+    box-shadow: 0 12px 32px -10px var(--pf-accent-glow);
 }
 
 .pf-empty-title {
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     font-weight: 700;
     color: var(--pf-text-1);
-    margin: 0 0 0.5rem;
-    letter-spacing: -0.02em;
+    margin: 0 0 0.45rem;
+    letter-spacing: -0.022em;
 }
 .pf-empty-sub {
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     color: var(--pf-text-3);
-    margin-bottom: 0.5rem;
-    line-height: 1.6;
+    margin: 0 0 1.25rem;
+    line-height: 1.55;
 }
 .pf-empty-sub code {
     background: var(--pf-surface-2);
     border: 1px solid var(--pf-border);
     border-radius: 4px;
-    padding: 0.1em 0.35em;
+    padding: 0.1em 0.4em;
     font-size: 0.85em;
     color: var(--pf-text-2);
 }
-.pf-empty-hint { font-size: 0.8rem; color: var(--pf-text-4); margin: 0; }
+
+/* Capability chips: a confident "what this product does" line. */
+.pf-empty-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+.pf-empty-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--pf-text-3);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem 0.32rem 0.55rem;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.pf-empty-chip svg {
+    color: var(--pf-accent);
+    flex-shrink: 0;
+}
+.pf-empty-chip:hover {
+    border-color: color-mix(in srgb, var(--pf-accent) 30%, var(--pf-border));
+    color: var(--pf-text-2);
+}
 
 /* ── Solving placeholder ───────────────────────────────── */
 
@@ -248,41 +281,131 @@
 }
 .pf-section-note { font-style: italic; }
 
-/* ── Status card ───────────────────────────────────────── */
+/* ── Hero result card ──────────────────────────────────── */
+/* Confident, data-forward replacement for the old status banner.        */
+/* Layout: state pill on the left, big tabular iteration count as the    */
+/* headline, supporting metrics on the right. Adapts down on mobile.     */
 
-.pf-status-card {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
+.pf-hero {
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
     border-radius: var(--pf-radius);
-    padding: 0.9rem 1.1rem;
-    border: 1px solid transparent;
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--pf-shadow-sm);
+    /* Accent bar on the left edge — semantic colour without painting the whole card */
+    border-left-width: 3px;
+    transition: background 0.2s, border-color 0.2s;
 }
-.pf-status-ok   { background: var(--pf-ok-bg);   border-color: var(--pf-ok-border); }
-.pf-status-fail { background: var(--pf-fail-bg);  border-color: var(--pf-fail-border); }
+.pf-hero-ok   { border-left-color: var(--pf-ok-icon); }
+.pf-hero-fail { border-left-color: var(--pf-fail-icon); }
 
-.pf-status-icon {
-    flex-shrink: 0;
-    width: 36px; height: 36px;
-    border-radius: 50%;
+.pf-hero-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
 }
-.pf-status-ok   .pf-status-icon { background: var(--pf-ok-icon-bg);   color: var(--pf-ok-icon); }
-.pf-status-fail .pf-status-icon { background: var(--pf-fail-icon-bg); color: var(--pf-fail-icon); }
 
-.pf-status-title {
-    font-size: 0.975rem;
+/* Left: state pill ─ small, definitive */
+.pf-hero-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.32rem 0.7rem 0.32rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
     font-weight: 700;
-    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
 }
-.pf-status-ok   .pf-status-title { color: var(--pf-ok-text); }
-.pf-status-fail .pf-status-title { color: var(--pf-fail-text); }
+.pf-hero-ok   .pf-hero-pill { background: var(--pf-ok-icon-bg);   color: var(--pf-ok-icon); }
+.pf-hero-fail .pf-hero-pill { background: var(--pf-fail-icon-bg); color: var(--pf-fail-icon); }
 
-.pf-status-meta { font-size: 0.8rem; margin-top: 0.2rem; }
-.pf-status-ok   .pf-status-meta { color: var(--pf-ok-meta); }
-.pf-status-fail .pf-status-meta { color: var(--pf-fail-text); }
+/* Middle: big number + label */
+.pf-hero-headline {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.pf-hero-num {
+    font-family: var(--pf-mono);
+    font-size: 2.1rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--pf-text-1);
+    /* Subtle accent gradient on the digits — confident without being loud */
+    background: linear-gradient(135deg, var(--pf-text-1), var(--pf-text-2) 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.pf-hero-num-sm { font-size: 1.5rem; font-weight: 600; }
+.pf-hero-num-lbl {
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--pf-text-3);
+    letter-spacing: -0.005em;
+}
+.pf-hero-num-lbl-em { color: var(--pf-text-2); font-weight: 500; }
+.pf-hero-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--pf-border);
+    margin: 0.15rem 0.3rem;
+}
+
+/* Right: supporting stats */
+.pf-hero-stats {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-shrink: 0;
+}
+.pf-hero-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    line-height: 1.1;
+}
+.pf-hero-stat-lbl {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pf-text-4);
+}
+.pf-hero-stat-val {
+    font-family: var(--pf-mono);
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--pf-text-2);
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.pf-hero-extra {
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--pf-border);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+    .pf-hero-row { gap: 0.9rem; }
+    .pf-hero-stats { gap: 1rem; }
+    .pf-hero-num { font-size: 1.7rem; }
+    .pf-hero-divider { display: none; }
+}
 
 /* ── Banners ───────────────────────────────────────────── */
 
@@ -748,4 +871,119 @@
     .pf-metric:nth-child(5),
     .pf-metric:nth-child(6) { border-top: 1px solid var(--pf-border); }
     .pf-metric:nth-child(6) { border-right: none; }
+}
+
+/* ── Solver options panel ──────────────────────────────── */
+
+.pf-options {
+    padding: 0.55rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.pf-options-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    min-height: 1.9rem;
+}
+.pf-options-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--pf-text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+.pf-options-sep {
+    width: 1px;
+    height: 1.2rem;
+    background: var(--pf-border);
+    margin: 0 0.15rem;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.pf-segmented {
+    display: inline-flex;
+    border: 1px solid var(--pf-border);
+    border-radius: var(--pf-radius-sm);
+    overflow: hidden;
+    background: var(--pf-surface-2);
+    transition: background 0.2s, border-color 0.2s;
+}
+.pf-seg {
+    background: none;
+    border: none;
+    padding: 0.32rem 0.85rem;
+    font-size: 0.825rem;
+    font-weight: 500;
+    color: var(--pf-text-3);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.pf-seg:hover:not(.active):not(:disabled) {
+    background: var(--pf-surface-3, var(--pf-surface));
+    color: var(--pf-text-1);
+}
+.pf-seg.active {
+    background: var(--pf-accent, #2563eb);
+    color: white;
+}
+.pf-seg:disabled { cursor: not-allowed; opacity: 0.5; }
+.pf-seg + .pf-seg { border-left: 1px solid var(--pf-border); }
+.pf-seg.active + .pf-seg,
+.pf-seg + .pf-seg.active { border-left-color: transparent; }
+
+.pf-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.825rem;
+    color: var(--pf-text-2);
+    cursor: pointer;
+    user-select: none;
+}
+.pf-check input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--pf-accent, #2563eb);
+}
+.pf-check input[type="checkbox"]:disabled { cursor: not-allowed; }
+.pf-check:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+
+.pf-num-input {
+    width: 5.5rem;
+    background: var(--pf-surface-2);
+    border: 1px solid var(--pf-border);
+    border-radius: var(--pf-radius-sm);
+    padding: 0.28rem 0.5rem;
+    font-size: 0.825rem;
+    font-family: var(--pf-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    color: var(--pf-text-1);
+    transition: border-color 0.12s, background 0.2s;
+}
+.pf-num-input:focus {
+    outline: none;
+    border-color: var(--pf-accent, #2563eb);
+}
+.pf-num-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Distributed-slack λ pill (sits inside .pf-hero-extra) ─ */
+
+.pf-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: var(--pf-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    letter-spacing: 0.01em;
+}
+.pf-pill-accent {
+    background: color-mix(in srgb, var(--pf-accent, #2563eb) 18%, transparent);
+    color: var(--pf-accent, #2563eb);
+    border: 1px solid color-mix(in srgb, var(--pf-accent, #2563eb) 35%, transparent);
 }
