@@ -9,6 +9,12 @@ namespace PowerFlow.Core.Validation;
 /// </summary>
 public static class NetworkValidator
 {
+    /// <summary>
+    /// Validates the structure and parameters of <paramref name="network"/>.
+    /// Returns <see cref="ValidationResult.Ok"/> when no issues are found.
+    /// Errors indicate problems that will cause the solver to fail; warnings
+    /// indicate suspicious data that may still produce a result.
+    /// </summary>
     public static ValidationResult Validate(PowerNetwork network)
     {
         var errors = new List<ValidationError>();

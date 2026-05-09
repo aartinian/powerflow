@@ -30,6 +30,7 @@ public class DcPowerFlowResult
     /// </summary>
     public IReadOnlyList<DcBranchFlow> BranchFlows { get; }
 
+    /// <summary>Initializes a new DC power-flow result with the specified angles, generation, and branch flows.</summary>
     public DcPowerFlowResult(double[] va, double[] pg, IReadOnlyList<DcBranchFlow> branchFlows)
     {
         Va = va;
@@ -44,10 +45,19 @@ public class DcPowerFlowResult
 /// </summary>
 public class DcBranchFlow
 {
+    /// <summary>Bus ID of the from-end (sending) terminal.</summary>
     public int FromBus { get; }
-    public int ToBus { get; }
-    public double P { get; } // pu — positive = from-end → to-end
 
+    /// <summary>Bus ID of the to-end (receiving) terminal.</summary>
+    public int ToBus { get; }
+
+    /// <summary>
+    /// Real-power flow on the branch in pu on the system base.
+    /// Positive = power flows from the from-end to the to-end; negative = reverse flow.
+    /// </summary>
+    public double P { get; }
+
+    /// <summary>Initializes a new DC branch flow with the specified terminals and real-power injection.</summary>
     public DcBranchFlow(int fromBus, int toBus, double p)
     {
         FromBus = fromBus;

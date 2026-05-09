@@ -17,8 +17,24 @@ namespace PowerFlow.Core.Solver;
 /// </summary>
 public class NewtonRaphsonSolver
 {
-    public double Tolerance { get; init; } = 1e-6; // pu — matches MATPOWER default
+    /// <summary>
+    /// Convergence tolerance in pu. The solver stops when the largest absolute
+    /// power mismatch falls below this value. Default 1e-6 matches MATPOWER.
+    /// </summary>
+    public double Tolerance { get; init; } = 1e-6;
+
+    /// <summary>
+    /// Maximum number of Newton-Raphson iterations per convergence attempt.
+    /// Default 50. Increase only for difficult networks; check convergence status
+    /// before raising this to avoid masking data issues.
+    /// </summary>
     public int MaxIterations { get; init; } = 50;
+
+    /// <summary>
+    /// When <c>true</c>, enforce reactive power limits by switching PV buses to PQ
+    /// when their reactive output hits a ceiling or floor. When <c>false</c>,
+    /// generators are unconstrained (useful for checking feasibility).
+    /// </summary>
     public bool EnforceLimits { get; init; } = true;
 
     /// <summary>
@@ -109,7 +125,7 @@ public class NewtonRaphsonSolver
     /// <summary>
     /// Solve the AC power flow for the given network using polar-form
     /// Newton-Raphson with sparse LU factorisation. The network must contain
-    /// exactly one slack bus; validate first with <see cref="NetworkValidator"/>
+    /// exactly one slack bus; validate first with <see cref="Validation.NetworkValidator"/>
     /// to surface other issues (missing bus references, bad tap ratios, etc.)
     /// before calling.
     /// </summary>

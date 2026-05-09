@@ -7,15 +7,40 @@ namespace PowerFlow.Core.Solver;
 /// </summary>
 public class SystemBalance
 {
-    public double TotalGenerationMw { get; } // MW
-    public double TotalLoadMw { get; } // MW
-    public double TotalLossesMw { get; } // MW   — Σ (Pij + Pji) over all in-service branches
-    public double LossPct { get; } // %    — TotalLossesMw / TotalLoadMw × 100
-    public double TotalGenerationMvar { get; } // MVAr
-    public double TotalLoadMvar { get; } // MVAr
-    public double TotalShuntMvar { get; } // MVAr — net reactive injection from shunts (positive = capacitive)
-    public double TotalLossesMvar { get; } // MVAr — Σ (Qij + Qji) over all in-service branches
+    /// <summary>Total real-power generation dispatched across all in-service generators in MW.</summary>
+    public double TotalGenerationMw { get; }
 
+    /// <summary>Total real-power load served across all buses in MW.</summary>
+    public double TotalLoadMw { get; }
+
+    /// <summary>
+    /// Total real-power losses in MW: Σ (P_ij + P_ji) over all in-service branches.
+    /// Always non-negative for a convergent solution.
+    /// </summary>
+    public double TotalLossesMw { get; }
+
+    /// <summary>Losses as a percentage of total load: TotalLossesMw / TotalLoadMw × 100.</summary>
+    public double LossPct { get; }
+
+    /// <summary>Total reactive-power generation across all in-service generators in MVAr.</summary>
+    public double TotalGenerationMvar { get; }
+
+    /// <summary>Total reactive-power load served across all buses in MVAr.</summary>
+    public double TotalLoadMvar { get; }
+
+    /// <summary>
+    /// Net reactive injection from fixed shunt elements in MVAr.
+    /// Positive = net capacitive injection (shunts are net sources of reactive power).
+    /// </summary>
+    public double TotalShuntMvar { get; }
+
+    /// <summary>
+    /// Total reactive losses in MVAr: Σ (Q_ij + Q_ji) over all in-service branches.
+    /// Can be negative when line charging exceeds inductive losses.
+    /// </summary>
+    public double TotalLossesMvar { get; }
+
+    /// <summary>Initializes a new system balance summary with the specified totals.</summary>
     public SystemBalance(
         double totalGenerationMw,
         double totalLoadMw,

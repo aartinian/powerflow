@@ -8,18 +8,52 @@ namespace PowerFlow.Core.Models;
 /// </summary>
 public class Bus
 {
+    /// <summary>Unique integer bus identifier (matches MATPOWER <c>bus_i</c> column).</summary>
     public int Id { get; }
-    public BusType Type { get; }
-    public double Pd { get; } // MW   load demand
-    public double Qd { get; } // MVAr load demand
-    public double Gs { get; } // MW   — divide by baseMVA when building Y-bus
-    public double Bs { get; } // MVAr — divide by baseMVA when building Y-bus
-    public double Vm { get; } // pu   initial voltage magnitude (used as solver flat-start)
-    public double Va { get; } // deg  initial voltage angle
-    public double BaseKv { get; } // kV   base voltage — per-unit reference, used for reporting only
-    public double Vmax { get; } // pu
-    public double Vmin { get; } // pu
 
+    /// <summary>Bus role in the power-flow problem: PQ, PV, Slack, or Isolated.</summary>
+    public BusType Type { get; }
+
+    /// <summary>Real power demand in MW.</summary>
+    public double Pd { get; }
+
+    /// <summary>Reactive power demand in MVAr.</summary>
+    public double Qd { get; }
+
+    /// <summary>
+    /// Shunt conductance in MW at 1 pu voltage. Divided by BaseMVA before being
+    /// added to the Y-bus diagonal as a real shunt load.
+    /// </summary>
+    public double Gs { get; }
+
+    /// <summary>
+    /// Shunt susceptance in MVAr at 1 pu voltage. Divided by BaseMVA before being
+    /// added to the Y-bus diagonal. Positive = capacitive (reactive injection).
+    /// </summary>
+    public double Bs { get; }
+
+    /// <summary>
+    /// Initial (or scheduled) voltage magnitude in pu. Used as the solver warm-start
+    /// unless <see cref="Solver.NewtonRaphsonSolver.FlatStart"/> overrides it.
+    /// </summary>
+    public double Vm { get; }
+
+    /// <summary>Initial (or scheduled) voltage angle in degrees.</summary>
+    public double Va { get; }
+
+    /// <summary>
+    /// Nominal base voltage in kV. Used for kV-scale reporting in
+    /// <see cref="Solver.VoltageViolation"/>; does not affect per-unit calculations.
+    /// </summary>
+    public double BaseKv { get; }
+
+    /// <summary>Maximum acceptable solved voltage magnitude in pu.</summary>
+    public double Vmax { get; }
+
+    /// <summary>Minimum acceptable solved voltage magnitude in pu.</summary>
+    public double Vmin { get; }
+
+    /// <summary>Initializes a new bus with the specified electrical and geometric parameters.</summary>
     public Bus(
         int id,
         BusType type,

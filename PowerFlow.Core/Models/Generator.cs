@@ -9,17 +9,53 @@ namespace PowerFlow.Core.Models;
 /// </summary>
 public class Generator
 {
+    /// <summary>ID of the bus to which this generator is connected.</summary>
     public int BusId { get; }
-    public double Pg { get; } // MW   scheduled real power output
-    public double Qg { get; } // MVAr reactive power output (initial; solver result for PV/slack)
-    public double Qmax { get; } // MVAr upper reactive limit — used for PV→PQ switching
-    public double Qmin { get; } // MVAr lower reactive limit — used for PV→PQ switching
-    public double Vg { get; } // pu   voltage setpoint — enforced at PV and slack buses
-    public double Pmax { get; } // MW
-    public double Pmin { get; } // MW
-    public bool IsInService { get; }
-    public double MBase { get; } // MVA machine base; 0 = use system base
 
+    /// <summary>Scheduled real power output in MW.</summary>
+    public double Pg { get; }
+
+    /// <summary>
+    /// Reactive power output in MVAr. Used as an initial value; the solver
+    /// overwrites this at PV and slack buses to satisfy the power-flow equations.
+    /// </summary>
+    public double Qg { get; }
+
+    /// <summary>
+    /// Upper reactive capability limit in MVAr. When <c>EnforceLimits</c> is on,
+    /// the bus is switched PV→PQ and Qg is pinned here if this ceiling is hit.
+    /// </summary>
+    public double Qmax { get; }
+
+    /// <summary>
+    /// Lower reactive capability limit in MVAr. When <c>EnforceLimits</c> is on,
+    /// the bus is switched PV→PQ and Qg is pinned here if this floor is hit.
+    /// </summary>
+    public double Qmin { get; }
+
+    /// <summary>
+    /// Voltage magnitude setpoint in pu. Enforced at PV and slack buses as the
+    /// regulated terminal voltage. When multiple generators share a PV bus with
+    /// differing setpoints, the last generator's value wins (validator warns).
+    /// </summary>
+    public double Vg { get; }
+
+    /// <summary>Maximum real power capability in MW. Used as the participation-factor weight in distributed slack.</summary>
+    public double Pmax { get; }
+
+    /// <summary>Minimum stable real power output in MW.</summary>
+    public double Pmin { get; }
+
+    /// <summary><c>true</c> when this generator contributes to the power-flow equations.</summary>
+    public bool IsInService { get; }
+
+    /// <summary>
+    /// Machine MVA base. 0 means the system <c>BaseMVA</c> is used (the default
+    /// when the MATPOWER <c>mBase</c> column is absent or zero).
+    /// </summary>
+    public double MBase { get; }
+
+    /// <summary>Initializes a new generator with the specified dispatch and capability data.</summary>
     public Generator(
         int busId,
         double pg,

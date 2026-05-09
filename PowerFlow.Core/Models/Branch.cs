@@ -10,20 +10,59 @@ namespace PowerFlow.Core.Models;
 /// </summary>
 public class Branch
 {
+    /// <summary>Bus ID of the from-end (sending) terminal.</summary>
     public int FromBus { get; }
+
+    /// <summary>Bus ID of the to-end (receiving) terminal.</summary>
     public int ToBus { get; }
-    public double R { get; } // pu resistance
-    public double X { get; } // pu reactance
-    public double B { get; } // pu total line charging susceptance (split equally at each end in π model)
-    public double TapRatio { get; } // off-nominal turns ratio
-    public double PhaseShift { get; } // deg transformer phase shift
-    public double RateA { get; } // MVA normal thermal rating (0 = unconstrained)
-    public double RateB { get; } // MVA short-circuit rating (0 = unconstrained)
-    public double RateC { get; } // MVA emergency rating (0 = unconstrained)
-    public double Angmin { get; } // deg minimum angle difference (Θf − Θt); −360 = unconstrained
-    public double Angmax { get; } // deg maximum angle difference (Θf − Θt);  360 = unconstrained
+
+    /// <summary>Series resistance in pu on the system base.</summary>
+    public double R { get; }
+
+    /// <summary>Series reactance in pu on the system base.</summary>
+    public double X { get; }
+
+    /// <summary>
+    /// Total line charging susceptance in pu on the system base.
+    /// Split equally (B/2) at each end of the π equivalent circuit.
+    /// </summary>
+    public double B { get; }
+
+    /// <summary>
+    /// Off-nominal turns ratio (transformer tap magnitude). A value of 0 in the
+    /// source data is normalised to 1.0 by the constructor (MATPOWER convention
+    /// for untapped lines). Always ≥ 1.0 after construction.
+    /// </summary>
+    public double TapRatio { get; }
+
+    /// <summary>Transformer phase shift in degrees (positive = leading).</summary>
+    public double PhaseShift { get; }
+
+    /// <summary>Normal continuous thermal rating in MVA. 0 = unconstrained.</summary>
+    public double RateA { get; }
+
+    /// <summary>Short-term (short-circuit) thermal rating in MVA. 0 = unconstrained.</summary>
+    public double RateB { get; }
+
+    /// <summary>Emergency thermal rating in MVA. 0 = unconstrained.</summary>
+    public double RateC { get; }
+
+    /// <summary>
+    /// Minimum angle difference θ_f − θ_t in degrees. −360 = unconstrained.
+    /// Stored for reference; not enforced by the solver (see known limitations).
+    /// </summary>
+    public double Angmin { get; }
+
+    /// <summary>
+    /// Maximum angle difference θ_f − θ_t in degrees. 360 = unconstrained.
+    /// Stored for reference; not enforced by the solver (see known limitations).
+    /// </summary>
+    public double Angmax { get; }
+
+    /// <summary><c>true</c> when the branch participates in the Y-bus and power-flow equations.</summary>
     public bool IsInService { get; }
 
+    /// <summary>Initializes a new branch with the specified parameters. Tap ratio is normalised to 1.0 if zero.</summary>
     public Branch(
         int fromBus,
         int toBus,

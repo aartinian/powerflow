@@ -22,7 +22,7 @@ public class DcPowerFlowSolver
     /// <summary>
     /// Solve the DC power flow for <paramref name="network"/>. The network
     /// must contain exactly one slack bus. Validate first with
-    /// <see cref="NetworkValidator"/> to surface structural issues before
+    /// <see cref="Validation.NetworkValidator"/> to surface structural issues before
     /// calling.
     /// </summary>
     public DcPowerFlowResult Solve(PowerNetwork network)

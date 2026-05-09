@@ -10,12 +10,35 @@ namespace PowerFlow.Core.Solver;
 /// </summary>
 public class GeneratorResult
 {
+    /// <summary>ID of the bus to which this generator is connected.</summary>
     public int BusId { get; }
-    public double Pg { get; } // MW   — dispatched real power (+ distributed-slack correction)
-    public double Qg { get; } // MVAr — bus reactive output shared equally among bus generators
-    public bool IsAtQmax { get; } // true when the bus was switched PV→PQ at its reactive ceiling
-    public bool IsAtQmin { get; } // true when the bus was switched PV→PQ at its reactive floor
 
+    /// <summary>
+    /// Real-power output in MW. Equals the scheduled dispatch plus any distributed-slack
+    /// correction (proportional to Pmax). Identical to the input <c>Pg</c> when
+    /// distributed slack is off.
+    /// </summary>
+    public double Pg { get; }
+
+    /// <summary>
+    /// Reactive-power output in MW. The bus-level total reactive generation divided
+    /// equally among all in-service generators at the bus.
+    /// </summary>
+    public double Qg { get; }
+
+    /// <summary>
+    /// <c>true</c> when the bus was switched PV→PQ because reactive generation hit
+    /// the Qmax ceiling. The bus Vm is no longer regulated in this state.
+    /// </summary>
+    public bool IsAtQmax { get; }
+
+    /// <summary>
+    /// <c>true</c> when the bus was switched PV→PQ because reactive generation hit
+    /// the Qmin floor. The bus Vm is no longer regulated in this state.
+    /// </summary>
+    public bool IsAtQmin { get; }
+
+    /// <summary>Initializes a new generator result with the specified operating point and Q-limit state.</summary>
     public GeneratorResult(int busId, double pg, double qg, bool isAtQmax, bool isAtQmin)
     {
         BusId = busId;

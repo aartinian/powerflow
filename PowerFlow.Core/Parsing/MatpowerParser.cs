@@ -15,8 +15,14 @@ namespace PowerFlow.Core.Parsing;
 /// </summary>
 public static class MatpowerParser
 {
+    /// <summary>Reads a MATPOWER <c>.m</c> file from disk and parses it into a <see cref="PowerNetwork"/>.</summary>
     public static PowerNetwork ParseFile(string path) => Parse(File.ReadAllText(path));
 
+    /// <summary>
+    /// Parses the text content of a MATPOWER <c>.m</c> case file into a
+    /// <see cref="PowerNetwork"/>. Throws <see cref="FormatException"/> with a
+    /// 1-based source line number when a row cannot be parsed.
+    /// </summary>
     public static PowerNetwork Parse(string content)
     {
         var lines = content.Split('\n');

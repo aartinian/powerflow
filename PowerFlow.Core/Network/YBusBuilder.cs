@@ -11,6 +11,11 @@ namespace PowerFlow.Core.Network;
 /// </summary>
 public static class YBusBuilder
 {
+    /// <summary>
+    /// Constructs the sparse bus admittance matrix Y from the network.
+    /// Uses the off-nominal-tap π model for branches and includes shunt admittances.
+    /// Out-of-service branches and isolated buses are handled correctly.
+    /// </summary>
     public static SparseYbus Build(PowerNetwork network)
     {
         int n = network.Buses.Count;
