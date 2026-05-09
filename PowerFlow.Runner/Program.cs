@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Parsing;
@@ -16,6 +18,7 @@ bool warmStart = false;
 bool noColor = false;
 bool noBuses = false;
 bool noBranches = false;
+string? outputFormat = null; // "json" or null (console)
 double tol = 1e-6;
 int maxIter = 50;
 
@@ -50,6 +53,10 @@ for (int i = 0; i < args.Length; i++)
         case "--summary-only":
             noBuses = true;
             noBranches = true;
+            break;
+        case "--output":
+            if (++i < args.Length)
+                outputFormat = args[i].ToLowerInvariant();
             break;
         case "--tol":
             if (
@@ -108,6 +115,7 @@ if (path is null)
     Console.WriteLine("  --no-buses            suppress the bus results table");
     Console.WriteLine("  --no-branches         suppress the branch results table");
     Console.WriteLine("  --summary-only        suppress both tables (equivalent to both above)");
+    Console.WriteLine("  --output <fmt>        output format: json, or console (default)");
     Console.WriteLine();
 }
 else if (!File.Exists(path))
@@ -131,18 +139,24 @@ string BY() => Esc("1;33"); // bold yellow
 var net = MatpowerParser.ParseFile(path!);
 double mva = net.BaseMva;
 int nBus = net.Buses.Count;
+bool isExportMode = outputFormat is not null; // Suppress console output when exporting
+if (isExportMode)
+    noBuses = noBranches = true; // Don't print tables when exporting
 int nBrIn = net.Branches.Count(b => b.IsInService);
 int nBrOff = net.Branches.Count(b => !b.IsInService);
 int nGen = net.Generators.Count(g => g.IsInService);
 string caseName = Path.GetFileNameWithoutExtension(path!);
 
-Console.WriteLine(
-    $"{B()}{caseName}{R()}  │  {nBus} bus{(nBus != 1 ? "es" : "")}  "
-        + $"{nBrIn} branch{(nBrIn != 1 ? "es" : "")}  "
-        + $"{nGen} generator{(nGen != 1 ? "s" : "")}  {mva:F0} MVA base"
-        + (nBrOff > 0 ? $"  ({nBrOff} out-of-service)" : "")
-);
-Console.WriteLine();
+if (!isExportMode)
+{
+    Console.WriteLine(
+        $"{B()}{caseName}{R()}  │  {nBus} bus{(nBus != 1 ? "es" : "")}  "
+            + $"{nBrIn} branch{(nBrIn != 1 ? "es" : "")}  "
+            + $"{nGen} generator{(nGen != 1 ? "s" : "")}  {mva:F0} MVA base"
+            + (nBrOff > 0 ? $"  ({nBrOff} out-of-service)" : "")
+    );
+    Console.WriteLine();
+}
 
 // ── Validate ──────────────────────────────────────────────────────────────────
 
@@ -236,6 +250,37 @@ if (dcMode)
     Console.WriteLine($"  Total Pg   {pgDc, 8:F1} MW     Total Pd   {pdDc, 8:F1} MW");
     Console.WriteLine("  Losses     0.0 MW  (lossless DC model)");
 
+    // ── JSON export (DC) ──────────────────────────────────────────────────────
+
+    if (outputFormat == "json")
+    {
+        var jsonOutput = new
+        {
+            convergence = new
+            {
+                converged = true,
+                model = "DC",
+            },
+            buses = net.Buses.Select((b, i) => new
+            {
+                id = b.Id,
+                type = b.Type.ToString(),
+                va_deg = Math.Round(dc.Va[i], 4),
+                pg_mw = Math.Round(D(dc.Pg[i] * mva), 2),
+                pd_mw = Math.Round(b.Pd, 2),
+            }).ToList(),
+            branches = dc.BranchFlows.Select(bf => new
+            {
+                from_bus = bf.FromBus,
+                to_bus = bf.ToBus,
+                p_mw = Math.Round(D(bf.P * mva), 2),
+            }).ToList(),
+        };
+
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        Console.WriteLine(JsonSerializer.Serialize(jsonOutput, options));
+    }
+
     return 0;
 }
 
@@ -244,7 +289,7 @@ if (dcMode)
 using var loggerFactory = LoggerFactory.Create(builder =>
     builder.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Information)
 );
-var log = loggerFactory.CreateLogger("PowerFlow");
+var log = isExportMode ? null : loggerFactory.CreateLogger("PowerFlow");
 
 var result = new NewtonRaphsonSolver
 {
@@ -257,19 +302,23 @@ var result = new NewtonRaphsonSolver
     MaxIterations = maxIter,
 }.Solve(net);
 
-Console.WriteLine();
+if (!isExportMode)
+    Console.WriteLine();
 
 // Convergence banner
-string iters = $"{result.Iterations} iteration{(result.Iterations != 1 ? "s" : "")}";
-if (result.Converged)
-    Console.WriteLine(
-        $"  {BG()}CONVERGED{R()} in {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
-    );
-else
-    Console.WriteLine(
-        $"  {BR()}DID NOT CONVERGE{R()} after {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
-    );
-Console.WriteLine();
+if (!isExportMode)
+{
+    string iters = $"{result.Iterations} iteration{(result.Iterations != 1 ? "s" : "")}";
+    if (result.Converged)
+        Console.WriteLine(
+            $"  {BG()}CONVERGED{R()} in {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
+        );
+    else
+        Console.WriteLine(
+            $"  {BR()}DID NOT CONVERGE{R()} after {iters}  max |mismatch| = {result.MaxMismatch:E3} pu"
+        );
+    Console.WriteLine();
+}
 
 // Ruler helper (local function — callable anywhere in this scope)
 string Ruler(string label) =>
@@ -342,7 +391,7 @@ foreach (var bf in result.BranchFlows)
 }
 
 // Voltage violations
-if (result.VoltageViolations.Count > 0)
+if (!isExportMode && result.VoltageViolations.Count > 0)
 {
     Console.WriteLine();
     Console.WriteLine(Ruler("Voltage Violations"));
@@ -358,7 +407,7 @@ if (result.VoltageViolations.Count > 0)
 }
 
 // Thermal violations
-if (thermalViols.Count > 0)
+if (!isExportMode && thermalViols.Count > 0)
 {
     Console.WriteLine();
     Console.WriteLine(Ruler("Thermal Violations"));
@@ -369,68 +418,142 @@ if (thermalViols.Count > 0)
         );
 }
 
-// Summary
-var bestBf = result
-    .BranchFlows.Where(bf => !double.IsNaN(bf.LoadingPct))
-    .OrderByDescending(bf => bf.LoadingPct)
-    .FirstOrDefault();
-var worstV =
-    result.VoltageViolations.Count > 0
-        ? result
-            .VoltageViolations.OrderByDescending(v =>
-                Math.Abs(v.Vm - (v.IsOverVoltage ? v.Vmax : v.Vmin))
-            )
-            .First()
-        : null;
+if (!isExportMode)
+{
+    // Summary
+    var bestBf = result
+        .BranchFlows.Where(bf => !double.IsNaN(bf.LoadingPct))
+        .OrderByDescending(bf => bf.LoadingPct)
+        .FirstOrDefault();
+    var worstV =
+        result.VoltageViolations.Count > 0
+            ? result
+                .VoltageViolations.OrderByDescending(v =>
+                    Math.Abs(v.Vm - (v.IsOverVoltage ? v.Vmax : v.Vmin))
+                )
+                .First()
+            : null;
 
-Console.WriteLine();
-Console.WriteLine(Ruler("Balance"));
-if (result.Balance is { } bal)
-{
-    Console.WriteLine(
-        $"  {"Generation", -14}  {bal.TotalGenerationMw, 8:F1} MW   {bal.TotalGenerationMvar, 8:F1} MVAr"
-    );
-    Console.WriteLine(
-        $"  {"Load", -14}  {bal.TotalLoadMw, 8:F1} MW   {bal.TotalLoadMvar, 8:F1} MVAr"
-    );
-    Console.WriteLine($"  {"Losses", -14}  {bal.TotalLossesMw, 8:F1} MW   ({bal.LossPct:F2} %)");
-    if (Math.Abs(result.Lambda * mva) >= 0.05)
-        Console.WriteLine($"  {"Dist. slack λ", -14}  {result.Lambda * mva, +8:F1} MW");
-}
-else
-{
-    Console.WriteLine("  (not available — solver did not converge)");
-}
-
-if (result.QLimitBound.Count > 0)
-{
     Console.WriteLine();
-    Console.WriteLine(Ruler("Q-Limits Binding"));
-    foreach (var (busId, atMax) in result.QLimitBound)
+    Console.WriteLine(Ruler("Balance"));
+    if (result.Balance is { } bal)
     {
-        var gr = result.Generators.FirstOrDefault(g => g.BusId == busId);
-        string lm = atMax ? $"{BY()}Qmax{R()}" : $"{BY()}Qmin{R()}";
-        string gv = gr is not null ? $"  Pg={gr.Pg:F1} MW  Qg={gr.Qg:F1} MVAr" : "";
-        Console.WriteLine($"  Bus {busId, -4}  [{lm}]{gv}");
+        Console.WriteLine(
+            $"  {"Generation", -14}  {bal.TotalGenerationMw, 8:F1} MW   {bal.TotalGenerationMvar, 8:F1} MVAr"
+        );
+        Console.WriteLine(
+            $"  {"Load", -14}  {bal.TotalLoadMw, 8:F1} MW   {bal.TotalLoadMvar, 8:F1} MVAr"
+        );
+        Console.WriteLine($"  {"Losses", -14}  {bal.TotalLossesMw, 8:F1} MW   ({bal.LossPct:F2} %)");
+        if (Math.Abs(result.Lambda * mva) >= 0.05)
+            Console.WriteLine($"  {"Dist. slack λ", -14}  {result.Lambda * mva, +8:F1} MW");
     }
+    else
+    {
+        Console.WriteLine("  (not available — solver did not converge)");
+    }
+
+    if (result.QLimitBound.Count > 0)
+    {
+        Console.WriteLine();
+        Console.WriteLine(Ruler("Q-Limits Binding"));
+        foreach (var (busId, atMax) in result.QLimitBound)
+        {
+            var gr = result.Generators.FirstOrDefault(g => g.BusId == busId);
+            string lm = atMax ? $"{BY()}Qmax{R()}" : $"{BY()}Qmin{R()}";
+            string gv = gr is not null ? $"  Pg={gr.Pg:F1} MW  Qg={gr.Qg:F1} MVAr" : "";
+            Console.WriteLine($"  Bus {busId, -4}  [{lm}]{gv}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine(Ruler("Solver"));
+    Console.WriteLine(
+        $"  {"Iterations", -14}  {result.Iterations}   max|f| = {result.MaxMismatch:E2} pu"
+    );
+    if (worstV is not null)
+    {
+        string kind = worstV.IsOverVoltage ? "over" : "under";
+        string kvNote = worstV.BaseKv > 0 ? $"  ({worstV.VmKv:F2} kV)" : "";
+        Console.WriteLine(
+            $"  {"Worst voltage", -14}  Bus {worstV.BusId, -5} {worstV.Vm:F4} pu{kvNote}  ({kind}voltage)"
+        );
+    }
+    if (bestBf is not null)
+        Console.WriteLine(
+            $"  {"Max loading", -14}  {bestBf.FromBusId}→{bestBf.ToBusId}   {bestBf.LoadingPct:F1} %"
+        );
 }
 
-Console.WriteLine();
-Console.WriteLine(Ruler("Solver"));
-Console.WriteLine(
-    $"  {"Iterations", -14}  {result.Iterations}   max|f| = {result.MaxMismatch:E2} pu"
-);
-if (worstV is not null)
+// ── JSON export ────────────────────────────────────────────────────────────────
+
+if (outputFormat == "json")
 {
-    string kind = worstV.IsOverVoltage ? "over" : "under";
-    string kvNote = worstV.BaseKv > 0 ? $"  ({worstV.VmKv:F2} kV)" : "";
-    Console.WriteLine(
-        $"  {"Worst voltage", -14}  Bus {worstV.BusId, -5} {worstV.Vm:F4} pu{kvNote}  ({kind}voltage)"
-    );
+    var jsonOutput = new
+    {
+        convergence = new
+        {
+            converged = result.Converged,
+            iterations = result.Iterations,
+            outer_iterations = result.OuterIterations,
+            max_mismatch_pu = result.MaxMismatch,
+            lambda_pu = result.Lambda,
+        },
+        buses = net.Buses.Select((b, i) => new
+        {
+            id = b.Id,
+            type = b.Type.ToString(),
+            vm_pu = Math.Round(result.Vm[i], 6),
+            va_deg = Math.Round(result.Va[i], 4),
+            pg_mw = Math.Round(D(result.Pg[i] * mva), 2),
+            qg_mvar = Math.Round(D(result.Qg[i] * mva), 2),
+            pd_mw = Math.Round(b.Pd, 2),
+            qd_mvar = Math.Round(b.Qd, 2),
+        }).ToList(),
+        branches = result.BranchFlows.Select(bf => new
+        {
+            from_bus = bf.FromBusId,
+            to_bus = bf.ToBusId,
+            pij_mw = Math.Round(D(bf.Pij * mva), 2),
+            qij_mvar = Math.Round(D(bf.Qij * mva), 2),
+            pji_mw = Math.Round(D(bf.Pji * mva), 2),
+            qji_mvar = Math.Round(D(bf.Qji * mva), 2),
+            loss_mw = Math.Round(D((bf.Pij + bf.Pji) * mva), 2),
+            loading_pct = (double?)(!double.IsNaN(bf.LoadingPct) ? Math.Round(bf.LoadingPct, 2) : null),
+        }).ToList(),
+        system_balance = result.Balance is { } balance ? new
+        {
+            generation_mw = Math.Round(balance.TotalGenerationMw, 2),
+            load_mw = Math.Round(balance.TotalLoadMw, 2),
+            losses_mw = Math.Round(balance.TotalLossesMw, 2),
+            losses_pct = Math.Round(balance.LossPct, 3),
+            generation_mvar = Math.Round(balance.TotalGenerationMvar, 2),
+            load_mvar = Math.Round(balance.TotalLoadMvar, 2),
+            shunt_mvar = Math.Round(balance.TotalShuntMvar, 2),
+            losses_mvar = Math.Round(balance.TotalLossesMvar, 2),
+        } : null,
+        voltage_violations = result.VoltageViolations.Select(v => new
+        {
+            bus_id = v.BusId,
+            vm_pu = Math.Round(v.Vm, 6),
+            vmin_pu = Math.Round(v.Vmin, 4),
+            vmax_pu = Math.Round(v.Vmax, 4),
+            is_under = v.IsUnderVoltage,
+            is_over = v.IsOverVoltage,
+            base_kv = v.BaseKv > 0 ? (double?)v.BaseKv : null,
+        }).ToList(),
+        generators = result.Generators.Select(g => new
+        {
+            bus_id = g.BusId,
+            pg_mw = Math.Round(g.Pg, 2),
+            qg_mvar = Math.Round(g.Qg, 2),
+            at_qmax = g.IsAtQmax,
+            at_qmin = g.IsAtQmin,
+        }).ToList(),
+    };
+
+    var options = new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    Console.WriteLine(JsonSerializer.Serialize(jsonOutput, options));
 }
-if (bestBf is not null)
-    Console.WriteLine(
-        $"  {"Max loading", -14}  {bestBf.FromBusId}→{bestBf.ToBusId}   {bestBf.LoadingPct:F1} %"
-    );
 
 return result.Converged ? 0 : 2;
