@@ -10,7 +10,7 @@ namespace PowerFlow.Tests.Solver;
 ///
 /// Fixtures under PowerFlow.Tests/Fixtures/ store per-bus Vm/Va produced by
 /// the solver from a flat start, converged to 1e-6.  The case14 solution
-/// has additionally been validated digit-by-digit against MATPOWER 7.x in
+/// has additionally been validated digit-by-digit against MATPOWER in
 /// <see cref="SolverValidationTests"/>.  The remaining cases are regression
 /// baselines: any solver regression that shifts a bus voltage by more than
 /// 1e-6 pu / 1e-5 ° will be caught here.

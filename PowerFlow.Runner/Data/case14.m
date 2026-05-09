@@ -1,6 +1,6 @@
 function mpc = case14
 %CASE14  Power flow data for IEEE 14-bus test case.
-%   Values from the MATPOWER 7.x distribution (case14.m).
+%   Values from the MATPOWER distribution (case14.m).
 %   Used for solver validation against published MATPOWER results.
 
 mpc.version = '2';
