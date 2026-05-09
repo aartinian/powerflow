@@ -72,6 +72,63 @@
     <div class="pf-banner pf-fail mb-3">@error</div>
 }
 
+@if (validationErrors.Count > 0 || validationWarnings.Count > 0)
+{
+    <div class="pf-panel pf-violations mb-3">
+        <div class="pf-section-head @(validationErrors.Count > 0 ? "pf-section-head-fail" : "pf-section-head-warn")">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span class="pf-section-title">
+                @if (validationErrors.Count > 0)
+                {
+                    <text>Validation Failed</text>
+                }
+                else
+                {
+                    <text>Validation Warnings</text>
+                }
+            </span>
+            <span class="pf-section-meta">
+                @validationErrors.Count error@(validationErrors.Count == 1 ? "" : "s")
+                @if (validationWarnings.Count > 0)
+                {
+                    <text>&thinsp;·&thinsp; @validationWarnings.Count warning@(validationWarnings.Count == 1 ? "" : "s")</text>
+                }
+            </span>
+        </div>
+        <div class="pf-tbl-wrap" style="max-height:240px">
+            <table class="table table-sm pf-tbl mb-0">
+                <thead><tr>
+                    <th style="width:5.5rem">Severity</th>
+                    <th style="width:14rem">Code</th>
+                    <th>Message</th>
+                </tr></thead>
+                <tbody>
+                    @foreach (var v in validationErrors)
+                    {
+                        <tr>
+                            <td><span class="pf-vbadge pf-vbadge-under">Error</span></td>
+                            <td class="pf-cell-muted"><code>@v.Code</code></td>
+                            <td>@v.Message</td>
+                        </tr>
+                    }
+                    @foreach (var v in validationWarnings)
+                    {
+                        <tr>
+                            <td><span class="pf-vbadge pf-vbadge-over">Warning</span></td>
+                            <td class="pf-cell-muted"><code>@v.Code</code></td>
+                            <td>@v.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
 <!-- ── Idle state ──────────────────────────────────────── -->
 @if (!busy && logLines.Count == 0 && result is null)
 {
@@ -160,7 +217,11 @@
             <div class="pf-status-body">
                 <div class="pf-status-title">@(result.Converged ? "Converged" : "Did not converge")</div>
                 <div class="pf-status-meta">
-                    @(result.Iterations + 1) iterations
+                    @result.Iterations iteration@(result.Iterations == 1 ? "" : "s")
+                    @if (result.OuterIterations > 1)
+                    {
+                        <text>&thinsp;·&thinsp; @result.OuterIterations outer pass@(result.OuterIterations == 1 ? "" : "es")</text>
+                    }
                     &thinsp;·&thinsp;
                     max mismatch @result.MaxMismatch.ToString("e2") pu
                     &thinsp;·&thinsp;
@@ -462,6 +523,10 @@
                 }
                 else
                 {
+                    // Index in-service generator results by bus ID so we can highlight
+                    // PV→PQ-switched buses in the table. Multiple generators on the same
+                    // bus share a bus-level Q limit, so they all get the same badge.
+                    var genResultByBus = result.Generators.ToDictionary(g => g.BusId);
                     <table class="table table-sm pf-tbl mb-0">
                         <thead><tr>
                             <th>#</th>
@@ -473,6 +538,7 @@
                             <th class="text-end">Qg (MVAr)</th>
                             <th class="text-end">Qg_min</th>
                             <th class="text-end">Qg_max</th>
+                            <th>Q-limit</th>
                             <th>Status</th>
                         </tr></thead>
                         <tbody>
@@ -480,6 +546,7 @@
                             {
                                 var gen = network.Generators[i];
                                 var busIdx = network.IndexOf(gen.BusId);
+                                genResultByBus.TryGetValue(gen.BusId, out var gr);
                                 <tr>
                                     <td class="pf-cell-muted">@(i + 1)</td>
                                     <td>@gen.BusId</td>
@@ -490,6 +557,16 @@
                                     <td class="text-end">@Fmt(result.Qg[busIdx] * network.BaseMva)</td>
                                     <td class="text-end pf-cell-muted">@Fmt(gen.Qmin)</td>
                                     <td class="text-end pf-cell-muted">@Fmt(gen.Qmax)</td>
+                                    <td>
+                                        @if (gr is { IsAtQmax: true })
+                                        {
+                                            <span class="pf-vbadge pf-vbadge-over" title="PV bus switched to PQ — reactive output pinned at Qmax">Qmax</span>
+                                        }
+                                        else if (gr is { IsAtQmin: true })
+                                        {
+                                            <span class="pf-vbadge pf-vbadge-over" title="PV bus switched to PQ — reactive output pinned at Qmin">Qmin</span>
+                                        }
+                                    </td>
                                     <td>
                                         @if (gen.IsInService)
                                         {
@@ -544,6 +621,8 @@
     string? fileContent;
     bool busy;
     string? error;
+    List<ValidationError> validationErrors = [];
+    List<ValidationError> validationWarnings = [];
     string tab = "buses";
     bool logCollapsed = true;
     PowerNetwork? network;
@@ -566,10 +645,14 @@
     {
         if (result is null || network is null) return null;
         var ps = result.BranchFlows.Select(bf => bf.LoadingPct).Where(p => !double.IsNaN(p)).ToList();
+        // Prefer SystemBalance from a converged solve (computed once in Core, includes losses,
+        // shunts, reactive totals). Falls back to manual sums for non-converged results so the
+        // bar still shows last-iteration values rather than going blank.
+        var bal = result.Balance;
         return new SolveMetrics(
-            GenMW:      result.Pg.Sum() * network.BaseMva,
-            LoadMW:     network.Buses.Sum(b => b.Pd),
-            LossMW:     result.BranchFlows.Sum(bf => bf.Pij + bf.Pji) * network.BaseMva,
+            GenMW:      bal?.TotalGenerationMw ?? result.Pg.Sum() * network.BaseMva,
+            LoadMW:     bal?.TotalLoadMw ?? network.Buses.Sum(b => b.Pd),
+            LossMW:     bal?.TotalLossesMw ?? result.BranchFlows.Sum(bf => bf.Pij + bf.Pji) * network.BaseMva,
             VmMin:      result.Vm.Min(),
             VmMax:      result.Vm.Max(),
             MaxLoadPct: ps.Count > 0 ? ps.Max() : double.NaN,
@@ -608,6 +691,8 @@
         logLines.Clear();
         logCollapsed = true;
         _diagramError = null;
+        validationErrors.Clear();
+        validationWarnings.Clear();
 
         var logger = new SolverLogger(async (text, isWarn) =>
         {
@@ -622,6 +707,18 @@
         try
         {
             var net = MatpowerParser.Parse(fileContent);
+
+            // Validate before solving — surfaces NO_SLACK_BUS, NETWORK_ISLANDED, bad refs, etc.
+            // with stable error codes instead of letting the solver throw a confusing message
+            // (or silently return non-converged) deep inside the NR loop.
+            var validation = NetworkValidator.Validate(net);
+            validationErrors = validation.Errors
+                .Where(v => v.Severity == ValidationSeverity.Error).ToList();
+            validationWarnings = validation.Errors
+                .Where(v => v.Severity == ValidationSeverity.Warning).ToList();
+            if (validationErrors.Count > 0)
+                return; // workspace stays empty; the validation panel is visible
+
             var res = await Task.Run(() => new NewtonRaphsonSolver { Log = logger }.Solve(net));
             network = net;
             result = res;

@@ -626,6 +626,14 @@
 .pf-section-head-warn .pf-section-title { color: var(--pf-warn-text); }
 .pf-section-head-warn svg { color: var(--pf-warn-text); flex-shrink: 0; }
 
+.pf-section-head-fail {
+    background: var(--pf-fail-bg);
+    border-color: var(--pf-fail-border);
+    color: var(--pf-fail-text);
+}
+.pf-section-head-fail .pf-section-title { color: var(--pf-fail-text); }
+.pf-section-head-fail svg { color: var(--pf-fail-text); flex-shrink: 0; }
+
 .pf-vbadge {
     display: inline-block;
     font-size: 0.67rem;
