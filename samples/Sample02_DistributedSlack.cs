@@ -26,24 +26,27 @@ internal static class Sample02_DistributedSlack
         var conventional = new NewtonRaphsonSolver().Solve(network);
 
         // --- Distributed-slack solve ---
-        var distributed = new NewtonRaphsonSolver
-        {
-            DistributedSlack = true,
-        }.Solve(network);
+        var distributed = new NewtonRaphsonSolver { DistributedSlack = true }.Solve(network);
 
         // Both should converge.
         string ok(bool c) => c ? "✓" : "✗";
-        Console.WriteLine($"  Conventional : {ok(conventional.Converged)} " +
-                          $"{conventional.Iterations} iter,  λ = {conventional.Lambda:+0.0000;-0.0000} pu");
-        Console.WriteLine($"  Distributed  : {ok(distributed.Converged)}  " +
-                          $"{distributed.Iterations} iter,  λ = {distributed.Lambda:+0.0000;-0.0000} pu");
+        Console.WriteLine(
+            $"  Conventional : {ok(conventional.Converged)} "
+                + $"{conventional.Iterations} iter,  λ = {conventional.Lambda:+0.0000;-0.0000} pu"
+        );
+        Console.WriteLine(
+            $"  Distributed  : {ok(distributed.Converged)}  "
+                + $"{distributed.Iterations} iter,  λ = {distributed.Lambda:+0.0000;-0.0000} pu"
+        );
         Console.WriteLine();
 
         // λ is the shared imbalance in pu. Positive means generators collectively
         // produce more than scheduled; negative means under-production.
         double lambdaMw = distributed.Lambda * network.BaseMva;
-        Console.WriteLine($"  Shared imbalance λ = {lambdaMw:+0.000;-0.000} MW " +
-                          $"({distributed.Lambda:+0.00000;-0.00000} pu on {network.BaseMva} MVA base)");
+        Console.WriteLine(
+            $"  Shared imbalance λ = {lambdaMw:+0.000;-0.000} MW "
+                + $"({distributed.Lambda:+0.00000;-0.00000} pu on {network.BaseMva} MVA base)"
+        );
         Console.WriteLine();
 
         // Show how each generator's real-power output shifted.
@@ -58,8 +61,9 @@ internal static class Sample02_DistributedSlack
             var gd = distributed.Generators[i];
             double delta = gd.Pg - gc.Pg;
             string deltaStr = delta >= 0 ? $"+{delta:F3}" : $"{delta:F3}";
-            Console.WriteLine($"  {gc.BusId,3}   {gc.Pg,9:F2} MW   " +
-                              $"{gd.Pg,9:F2} MW   {deltaStr,8}");
+            Console.WriteLine(
+                $"  {gc.BusId, 3}   {gc.Pg, 9:F2} MW   " + $"{gd.Pg, 9:F2} MW   {deltaStr, 8}"
+            );
         }
 
         Console.WriteLine();

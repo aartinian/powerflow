@@ -26,29 +26,25 @@ internal static class Sample03_DcWarmStart
         var network = MatpowerParser.ParseFile(DataPath("case57.m"));
 
         // Strategy A: use voltage profile stored in the case file (warm bus data).
-        var resultA = new NewtonRaphsonSolver
-        {
-            FlatStart    = false,
-            WarmStartFromDc = false,
-        }.Solve(network);
+        var resultA = new NewtonRaphsonSolver { FlatStart = false, WarmStartFromDc = false }.Solve(
+            network
+        );
 
         // Strategy B: cold flat start — every bus at 1∠0°.
-        var resultB = new NewtonRaphsonSolver
-        {
-            FlatStart    = true,
-            WarmStartFromDc = false,
-        }.Solve(network);
+        var resultB = new NewtonRaphsonSolver { FlatStart = true, WarmStartFromDc = false }.Solve(
+            network
+        );
 
         // Strategy C: flat Vm but DC-initialised Va before the first NR step.
         var resultC = new NewtonRaphsonSolver
         {
-            FlatStart    = true,   // Vm = 1 pu flat; Va will be overwritten by DC
+            FlatStart = true, // Vm = 1 pu flat; Va will be overwritten by DC
             WarmStartFromDc = true,
         }.Solve(network);
 
         Console.WriteLine("  Strategy              Converged   Iterations   Max mismatch");
         Console.WriteLine("  ─────────────────────────────────────────────────────────");
-        PrintRow("A — bus data",  resultA);
+        PrintRow("A — bus data", resultA);
         PrintRow("B — flat start", resultB);
         PrintRow("C — DC warm-start", resultC);
         Console.WriteLine();
@@ -61,8 +57,10 @@ internal static class Sample03_DcWarmStart
             maxVmDiff = Math.Max(maxVmDiff, Math.Abs(resultA.Vm[i] - resultC.Vm[i]));
             maxVaDiff = Math.Max(maxVaDiff, Math.Abs(resultA.Va[i] - resultC.Va[i]));
         }
-        Console.WriteLine($"  Solution agreement (A vs C): " +
-                          $"ΔVm_max = {maxVmDiff:e2} pu,  ΔVa_max = {maxVaDiff:e2}°");
+        Console.WriteLine(
+            $"  Solution agreement (A vs C): "
+                + $"ΔVm_max = {maxVmDiff:e2} pu,  ΔVa_max = {maxVaDiff:e2}°"
+        );
         Console.WriteLine();
 
         // Stand-alone DC solve — useful when only real-power flows matter.
@@ -70,16 +68,20 @@ internal static class Sample03_DcWarmStart
         // The most loaded branch gives a quick loading indicator.
         var dcResult = new DcPowerFlowSolver().Solve(network);
         var peak = dcResult.BranchFlows.MaxBy(b => Math.Abs(b.P))!;
-        Console.WriteLine($"  DC solve: {dcResult.BranchFlows.Count} branch flows computed. " +
-                          $"Peak flow: {peak.P * network.BaseMva:+0.0;-0.0} MW " +
-                          $"on branch {peak.FromBus}→{peak.ToBus}");
+        Console.WriteLine(
+            $"  DC solve: {dcResult.BranchFlows.Count} branch flows computed. "
+                + $"Peak flow: {peak.P * network.BaseMva:+0.0;-0.0} MW "
+                + $"on branch {peak.FromBus}→{peak.ToBus}"
+        );
         Console.WriteLine();
     }
 
     private static void PrintRow(string label, PowerFlowResult r)
     {
         string conv = r.Converged ? "yes" : "NO";
-        Console.WriteLine($"  {label,-22}  {conv,-9}   {r.Iterations,6}       {r.MaxMismatch:e3} pu");
+        Console.WriteLine(
+            $"  {label, -22}  {conv, -9}   {r.Iterations, 6}       {r.MaxMismatch:e3} pu"
+        );
     }
 
     private static string DataPath(string filename) =>

@@ -256,25 +256,28 @@ if (dcMode)
     {
         var jsonOutput = new
         {
-            convergence = new
-            {
-                converged = true,
-                model = "DC",
-            },
-            buses = net.Buses.Select((b, i) => new
-            {
-                id = b.Id,
-                type = b.Type.ToString(),
-                va_deg = Math.Round(dc.Va[i], 4),
-                pg_mw = Math.Round(D(dc.Pg[i] * mva), 2),
-                pd_mw = Math.Round(b.Pd, 2),
-            }).ToList(),
-            branches = dc.BranchFlows.Select(bf => new
-            {
-                from_bus = bf.FromBus,
-                to_bus = bf.ToBus,
-                p_mw = Math.Round(D(bf.P * mva), 2),
-            }).ToList(),
+            convergence = new { converged = true, model = "DC" },
+            buses = net
+                .Buses.Select(
+                    (b, i) =>
+                        new
+                        {
+                            id = b.Id,
+                            type = b.Type.ToString(),
+                            va_deg = Math.Round(dc.Va[i], 4),
+                            pg_mw = Math.Round(D(dc.Pg[i] * mva), 2),
+                            pd_mw = Math.Round(b.Pd, 2),
+                        }
+                )
+                .ToList(),
+            branches = dc
+                .BranchFlows.Select(bf => new
+                {
+                    from_bus = bf.FromBus,
+                    to_bus = bf.ToBus,
+                    p_mw = Math.Round(D(bf.P * mva), 2),
+                })
+                .ToList(),
         };
 
         var options = new JsonSerializerOptions { WriteIndented = true };
@@ -444,7 +447,9 @@ if (!isExportMode)
         Console.WriteLine(
             $"  {"Load", -14}  {bal.TotalLoadMw, 8:F1} MW   {bal.TotalLoadMvar, 8:F1} MVAr"
         );
-        Console.WriteLine($"  {"Losses", -14}  {bal.TotalLossesMw, 8:F1} MW   ({bal.LossPct:F2} %)");
+        Console.WriteLine(
+            $"  {"Losses", -14}  {bal.TotalLossesMw, 8:F1} MW   ({bal.LossPct:F2} %)"
+        );
         if (Math.Abs(result.Lambda * mva) >= 0.05)
             Console.WriteLine($"  {"Dist. slack λ", -14}  {result.Lambda * mva, +8:F1} MW");
     }
@@ -499,60 +504,79 @@ if (outputFormat == "json")
             max_mismatch_pu = result.MaxMismatch,
             lambda_pu = result.Lambda,
         },
-        buses = net.Buses.Select((b, i) => new
-        {
-            id = b.Id,
-            type = b.Type.ToString(),
-            vm_pu = Math.Round(result.Vm[i], 6),
-            va_deg = Math.Round(result.Va[i], 4),
-            pg_mw = Math.Round(D(result.Pg[i] * mva), 2),
-            qg_mvar = Math.Round(D(result.Qg[i] * mva), 2),
-            pd_mw = Math.Round(b.Pd, 2),
-            qd_mvar = Math.Round(b.Qd, 2),
-        }).ToList(),
-        branches = result.BranchFlows.Select(bf => new
-        {
-            from_bus = bf.FromBusId,
-            to_bus = bf.ToBusId,
-            pij_mw = Math.Round(D(bf.Pij * mva), 2),
-            qij_mvar = Math.Round(D(bf.Qij * mva), 2),
-            pji_mw = Math.Round(D(bf.Pji * mva), 2),
-            qji_mvar = Math.Round(D(bf.Qji * mva), 2),
-            loss_mw = Math.Round(D((bf.Pij + bf.Pji) * mva), 2),
-            loading_pct = (double?)(!double.IsNaN(bf.LoadingPct) ? Math.Round(bf.LoadingPct, 2) : null),
-        }).ToList(),
-        system_balance = result.Balance is { } balance ? new
-        {
-            generation_mw = Math.Round(balance.TotalGenerationMw, 2),
-            load_mw = Math.Round(balance.TotalLoadMw, 2),
-            losses_mw = Math.Round(balance.TotalLossesMw, 2),
-            losses_pct = Math.Round(balance.LossPct, 3),
-            generation_mvar = Math.Round(balance.TotalGenerationMvar, 2),
-            load_mvar = Math.Round(balance.TotalLoadMvar, 2),
-            shunt_mvar = Math.Round(balance.TotalShuntMvar, 2),
-            losses_mvar = Math.Round(balance.TotalLossesMvar, 2),
-        } : null,
-        voltage_violations = result.VoltageViolations.Select(v => new
-        {
-            bus_id = v.BusId,
-            vm_pu = Math.Round(v.Vm, 6),
-            vmin_pu = Math.Round(v.Vmin, 4),
-            vmax_pu = Math.Round(v.Vmax, 4),
-            is_under = v.IsUnderVoltage,
-            is_over = v.IsOverVoltage,
-            base_kv = v.BaseKv > 0 ? (double?)v.BaseKv : null,
-        }).ToList(),
-        generators = result.Generators.Select(g => new
-        {
-            bus_id = g.BusId,
-            pg_mw = Math.Round(g.Pg, 2),
-            qg_mvar = Math.Round(g.Qg, 2),
-            at_qmax = g.IsAtQmax,
-            at_qmin = g.IsAtQmin,
-        }).ToList(),
+        buses = net
+            .Buses.Select(
+                (b, i) =>
+                    new
+                    {
+                        id = b.Id,
+                        type = b.Type.ToString(),
+                        vm_pu = Math.Round(result.Vm[i], 6),
+                        va_deg = Math.Round(result.Va[i], 4),
+                        pg_mw = Math.Round(D(result.Pg[i] * mva), 2),
+                        qg_mvar = Math.Round(D(result.Qg[i] * mva), 2),
+                        pd_mw = Math.Round(b.Pd, 2),
+                        qd_mvar = Math.Round(b.Qd, 2),
+                    }
+            )
+            .ToList(),
+        branches = result
+            .BranchFlows.Select(bf => new
+            {
+                from_bus = bf.FromBusId,
+                to_bus = bf.ToBusId,
+                pij_mw = Math.Round(D(bf.Pij * mva), 2),
+                qij_mvar = Math.Round(D(bf.Qij * mva), 2),
+                pji_mw = Math.Round(D(bf.Pji * mva), 2),
+                qji_mvar = Math.Round(D(bf.Qji * mva), 2),
+                loss_mw = Math.Round(D((bf.Pij + bf.Pji) * mva), 2),
+                loading_pct = (double?)(
+                    !double.IsNaN(bf.LoadingPct) ? Math.Round(bf.LoadingPct, 2) : null
+                ),
+            })
+            .ToList(),
+        system_balance = result.Balance is { } balance
+            ? new
+            {
+                generation_mw = Math.Round(balance.TotalGenerationMw, 2),
+                load_mw = Math.Round(balance.TotalLoadMw, 2),
+                losses_mw = Math.Round(balance.TotalLossesMw, 2),
+                losses_pct = Math.Round(balance.LossPct, 3),
+                generation_mvar = Math.Round(balance.TotalGenerationMvar, 2),
+                load_mvar = Math.Round(balance.TotalLoadMvar, 2),
+                shunt_mvar = Math.Round(balance.TotalShuntMvar, 2),
+                losses_mvar = Math.Round(balance.TotalLossesMvar, 2),
+            }
+            : null,
+        voltage_violations = result
+            .VoltageViolations.Select(v => new
+            {
+                bus_id = v.BusId,
+                vm_pu = Math.Round(v.Vm, 6),
+                vmin_pu = Math.Round(v.Vmin, 4),
+                vmax_pu = Math.Round(v.Vmax, 4),
+                is_under = v.IsUnderVoltage,
+                is_over = v.IsOverVoltage,
+                base_kv = v.BaseKv > 0 ? (double?)v.BaseKv : null,
+            })
+            .ToList(),
+        generators = result
+            .Generators.Select(g => new
+            {
+                bus_id = g.BusId,
+                pg_mw = Math.Round(g.Pg, 2),
+                qg_mvar = Math.Round(g.Qg, 2),
+                at_qmax = g.IsAtQmax,
+                at_qmin = g.IsAtQmin,
+            })
+            .ToList(),
     };
 
-    var options = new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+    var options = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
     Console.WriteLine(JsonSerializer.Serialize(jsonOutput, options));
 }
 

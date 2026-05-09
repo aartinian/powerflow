@@ -22,10 +22,10 @@ internal static class Sample01_BasicAcSolve
         //    All settings are init-only properties; they can be overridden here.
         var solver = new NewtonRaphsonSolver
         {
-            Tolerance    = 1e-6,   // convergence criterion (pu) — MATPOWER default
-            MaxIterations = 50,    // upper bound on NR iterations
-            EnforceLimits = true,  // enforce generator Q-limits (PV→PQ switching)
-            FlatStart    = false,  // use voltage magnitudes/angles from the bus data
+            Tolerance = 1e-6, // convergence criterion (pu) — MATPOWER default
+            MaxIterations = 50, // upper bound on NR iterations
+            EnforceLimits = true, // enforce generator Q-limits (PV→PQ switching)
+            FlatStart = false, // use voltage magnitudes/angles from the bus data
         };
 
         // 3. Solve.
@@ -39,8 +39,10 @@ internal static class Sample01_BasicAcSolve
             return;
         }
 
-        Console.WriteLine($"  ✓ Converged in {result.Iterations} iterations " +
-                          $"(max mismatch {result.MaxMismatch:e3} pu)");
+        Console.WriteLine(
+            $"  ✓ Converged in {result.Iterations} iterations "
+                + $"(max mismatch {result.MaxMismatch:e3} pu)"
+        );
         Console.WriteLine();
 
         // 5. Print per-bus voltages.
@@ -48,7 +50,9 @@ internal static class Sample01_BasicAcSolve
         Console.WriteLine("  ────────────────────────");
         for (int i = 0; i < network.Buses.Count; i++)
         {
-            Console.WriteLine($"  {network.Buses[i].Id,3}   {result.Vm[i]:F4}    {result.Va[i]:+0.00;-0.00}");
+            Console.WriteLine(
+                $"  {network.Buses[i].Id, 3}   {result.Vm[i]:F4}    {result.Va[i]:+0.00;-0.00}"
+            );
         }
 
         // 6. Print any voltage violations.
@@ -59,8 +63,10 @@ internal static class Sample01_BasicAcSolve
             foreach (var v in result.VoltageViolations)
             {
                 string tag = v.IsUnderVoltage ? "UNDER" : "OVER";
-                Console.WriteLine($"    Bus {v.BusId}: {tag} — Vm = {v.Vm:F4} pu " +
-                                  $"(limits [{v.Vmin:F3}, {v.Vmax:F3}])");
+                Console.WriteLine(
+                    $"    Bus {v.BusId}: {tag} — Vm = {v.Vm:F4} pu "
+                        + $"(limits [{v.Vmin:F3}, {v.Vmax:F3}])"
+                );
             }
         }
 
