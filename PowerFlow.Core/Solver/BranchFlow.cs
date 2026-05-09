@@ -7,7 +7,7 @@ namespace PowerFlow.Core.Solver;
 /// P_ij + P_ji ≥ 0.
 /// All values are in pu on the system base unless noted otherwise.
 /// </summary>
-public class BranchFlow
+public sealed class BranchFlow
 {
     /// <summary>Bus ID of the from-end terminal.</summary>
     public int FromBusId { get; }

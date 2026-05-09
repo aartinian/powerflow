@@ -1,7 +1,7 @@
 namespace PowerFlow.Core.Solver;
 
 /// <summary>A bus whose post-solution voltage magnitude falls outside its declared limits.</summary>
-public class VoltageViolation
+public sealed class VoltageViolation
 {
     /// <summary>Bus identifier.</summary>
     public int BusId { get; }

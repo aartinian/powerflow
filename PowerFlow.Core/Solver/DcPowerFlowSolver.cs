@@ -17,7 +17,7 @@ namespace PowerFlow.Core.Solver;
 /// as b = 1 / (a · X).
 /// </para>
 /// </summary>
-public class DcPowerFlowSolver
+public sealed class DcPowerFlowSolver
 {
     /// <summary>
     /// Solve the DC power flow for <paramref name="network"/>. The network

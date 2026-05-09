@@ -9,7 +9,7 @@ namespace PowerFlow.Core.Solver;
 /// model used by <see cref="Network.YBusBuilder"/>, but evaluates the branch
 /// currents instead of contributing to the admittance matrix.
 /// </summary>
-public static class BranchFlowCalculator
+internal static class BranchFlowCalculator
 {
     /// <summary>
     /// Returns one <see cref="BranchFlow"/> per in-service branch.

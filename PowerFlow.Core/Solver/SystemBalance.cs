@@ -5,7 +5,7 @@ namespace PowerFlow.Core.Solver;
 /// All values are in engineering units (MW or MVAr), not per-unit.
 /// Only populated when <see cref="PowerFlowResult.Converged"/> is true.
 /// </summary>
-public class SystemBalance
+public sealed class SystemBalance
 {
     /// <summary>Total real-power generation dispatched across all in-service generators in MW.</summary>
     public double TotalGenerationMw { get; }

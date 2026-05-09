@@ -6,7 +6,7 @@ namespace PowerFlow.Core.Solver;
 /// Voltage magnitudes are implicitly 1 pu throughout; reactive power and
 /// voltage violations are undefined in the DC model.
 /// </summary>
-public class DcPowerFlowResult
+public sealed class DcPowerFlowResult
 {
     /// <summary>
     /// Bus voltage angles in degrees, indexed by network.Buses order.
@@ -43,7 +43,7 @@ public class DcPowerFlowResult
 /// Real-power flow (pu) on one DC branch.
 /// Positive means power flows from <see cref="FromBus"/> to <see cref="ToBus"/>.
 /// </summary>
-public class DcBranchFlow
+public sealed class DcBranchFlow
 {
     /// <summary>Bus ID of the from-end (sending) terminal.</summary>
     public int FromBus { get; }

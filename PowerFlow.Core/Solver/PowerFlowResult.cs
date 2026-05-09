@@ -9,7 +9,7 @@ namespace PowerFlow.Core.Solver;
 /// last NR iteration but are not a valid solution; <see cref="VoltageViolations"/>
 /// and <see cref="Balance"/> are empty/null in that case.
 /// </summary>
-public class PowerFlowResult
+public sealed class PowerFlowResult
 {
     /// <summary><c>true</c> when the Newton-Raphson loop reached the convergence tolerance.</summary>
     public bool Converged { get; }

@@ -8,7 +8,7 @@ namespace PowerFlow.Core.Solver;
 /// generators at that bus — a documented approximation, since the solver tracks
 /// only bus totals, not per-generator reactive allocation.
 /// </summary>
-public class GeneratorResult
+public sealed class GeneratorResult
 {
     /// <summary>ID of the bus to which this generator is connected.</summary>
     public int BusId { get; }

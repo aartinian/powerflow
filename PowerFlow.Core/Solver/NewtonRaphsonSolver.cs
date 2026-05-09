@@ -15,7 +15,7 @@ namespace PowerFlow.Core.Solver;
 /// <see cref="Solve(PowerNetwork)"/>. The solver is stateless between calls; reuse a single
 /// instance or create a new one freely.
 /// </summary>
-public class NewtonRaphsonSolver
+public sealed class NewtonRaphsonSolver
 {
     /// <summary>
     /// Convergence tolerance in pu. The solver stops when the largest absolute
