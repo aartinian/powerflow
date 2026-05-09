@@ -1,21 +1,19 @@
-# fly.toml ─ Fly.io application config for PowerFlow.Web.
+# fly.toml app configuration file generated for powerflow-web on 2026-05-09T22:44:36Z
 #
-# After editing `app` to your preferred name, deploy with:
-#   flyctl auth login
-#   flyctl apps create powerflow-web      # only needed once
-#   flyctl deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# `flyctl launch` will accept this file directly; no further prompts.
 
 app = "powerflow-web"
 primary_region = "ams"                    # Amsterdam — closest to user
 
 # ─── Build ───────────────────────────────────────────────────────
 # Use the local Dockerfile rather than Fly's auto-detection.
+
 [build]
   dockerfile = "Dockerfile"
 
 # ─── Runtime env ─────────────────────────────────────────────────
+
 [env]
   ASPNETCORE_ENVIRONMENT = "Production"
   ASPNETCORE_URLS = "http://+:8080"
@@ -26,6 +24,7 @@ primary_region = "ams"                    # Amsterdam — closest to user
 # ─── HTTP service ────────────────────────────────────────────────
 # Blazor Server uses WebSockets for SignalR; Fly's http_service
 # handles ws/wss transparently over the same port.
+
 [http_service]
   internal_port = 8080
   force_https = true                      # Fly terminates TLS at the edge
@@ -40,6 +39,7 @@ primary_region = "ams"                    # Amsterdam — closest to user
 
   # Blazor Server holds a SignalR connection per browser tab.
   # 200 hard / 100 soft is generous for a personal demo.
+
   [http_service.concurrency]
     type = "connections"
     hard_limit = 200
@@ -47,6 +47,7 @@ primary_region = "ams"                    # Amsterdam — closest to user
 
   # Liveness probe — a GET / returns the empty-state page (HTML 200)
   # so it's a good cheap health signal.
+
   [[http_service.checks]]
     grace_period = "15s"
     interval = "30s"
@@ -58,7 +59,9 @@ primary_region = "ams"                    # Amsterdam — closest to user
 # 1 GB is comfortable for case300 (largest bundled IEEE case). Bump
 # if you load a much bigger network. Shared-CPU is plenty for a
 # single-user demo.
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
