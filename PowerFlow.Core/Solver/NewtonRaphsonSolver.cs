@@ -12,7 +12,7 @@ namespace PowerFlow.Core.Solver;
 /// kernel (CSparse). Configure with init-only properties (<see cref="Tolerance"/>,
 /// <see cref="MaxIterations"/>, <see cref="EnforceLimits"/>, <see cref="FlatStart"/>,
 /// <see cref="MaxLimitIterations"/>, <see cref="Log"/>) and call
-/// <see cref="Solve"/>. The solver is stateless between calls; reuse a single
+/// <see cref="Solve(PowerNetwork)"/>. The solver is stateless between calls; reuse a single
 /// instance or create a new one freely.
 /// </summary>
 public class NewtonRaphsonSolver
@@ -76,6 +76,22 @@ public class NewtonRaphsonSolver
     /// <c>LoggerFactory.Create(...)</c> in console apps.
     /// </summary>
     public ILogger? Log { get; init; }
+
+    /// <summary>
+    /// The sparse linear-system solver used inside each Newton-Raphson iteration.
+    /// Receives the Jacobian <c>J</c> (n×n compressed-column) and the mismatch
+    /// vector <c>f</c>; must return the correction vector <c>dx</c> such that
+    /// <c>J·dx = f</c>, or <c>null</c> when the system is singular / ill-conditioned.
+    /// A null return causes the NR loop to break with <see cref="PowerFlowResult.Converged"/>
+    /// = false, exactly like a non-convergence.
+    /// <para>
+    /// Default: CSparse sparse LU (<see cref="SparseLU"/>).
+    /// Override to plug in KLU, PARDISO, or any other factorisation backend
+    /// without recompiling the solver.
+    /// </para>
+    /// </summary>
+    public Func<CompressedColumnStorage<double>, double[], double[]?> LinearSolver { get; init; } =
+        CSparseLinearSolver;
 
     private void Info(string msg) => Log?.LogInformation("{Message}", msg);
 
@@ -220,7 +236,7 @@ public class NewtonRaphsonSolver
                         DistributedSlack ? slackIdx : -1,
                         DistributedSlack ? alpha : null
                     );
-                    var dx = SolveLinear(J, f);
+                    var dx = LinearSolver(J, f);
                     if (dx is null)
                     {
                         Warn(
@@ -848,10 +864,12 @@ public class NewtonRaphsonSolver
     }
 
     /// <summary>
-    /// Wraps CSparse sparse LU. Returns null when factorisation fails (singular Jacobian).
-    /// Callers must treat null as a non-convergence signal and break the NR loop.
+    /// Built-in CSparse sparse LU solver. Exposed as a public static so it can be
+    /// referenced directly (e.g. as a fallback inside a KLU adapter) or passed
+    /// explicitly: <c>new NewtonRaphsonSolver { LinearSolver = NewtonRaphsonSolver.CSparseLinearSolver }</c>.
+    /// Returns null when factorisation fails; the NR loop treats null as non-convergence.
     /// </summary>
-    private static double[]? SolveLinear(CompressedColumnStorage<double> A, double[] b)
+    public static double[]? CSparseLinearSolver(CompressedColumnStorage<double> A, double[] b)
     {
         try
         {

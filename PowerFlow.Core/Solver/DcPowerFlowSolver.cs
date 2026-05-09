@@ -104,7 +104,9 @@ public class DcPowerFlowSolver
             var thetaRed = new double[m];
             try
             {
-                SparseLU.Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(rhs, thetaRed);
+                SparseLU
+                    .Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0)
+                    .Solve(rhs, thetaRed);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
