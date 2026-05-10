@@ -1057,6 +1057,10 @@
         result = null;
         dcResult = null;
         _metrics = null;
+        // Clearing the result hides the workspace block, removing the split-pane
+        // DOM elements. Reset the flag so OnAfterRenderAsync re-attaches the
+        // splitter to the fresh elements Blazor creates when results come back.
+        _splitterAttached = false;
         _popover = null;
         _branchPopover = null;
         logLines.Clear();

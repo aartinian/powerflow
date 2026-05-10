@@ -19,12 +19,16 @@
 
 .pf-sidebar {
     position: sticky;
-    top: 76px;                                  /* topbar (60) + content top padding */
+    /* .pf-main is the scroll container (overflow-y: auto on MainLayout).
+       Sticky top is relative to .pf-main, not the window. 1.75rem matches
+       the content top padding so the sidebar sticks just at the content edge. */
+    top: 1.75rem;
     align-self: start;
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
-    max-height: calc(100vh - 96px);
+    /* topbar(60) + footer(~70) + top+bottom content padding(3.75rem) */
+    max-height: calc(100dvh - 60px - 70px - 3.75rem);
     overflow-y: auto;
     padding-right: 0.25rem;                     /* room for the scrollbar */
 }
@@ -1171,10 +1175,16 @@
 .pf-canvas-split {
     display: flex;
     flex-direction: row;
-    /* Fill the remaining viewport from this point down. The 280px subtracts  */
-    /* topbar + content padding + metrics-bar + footer breathing-room.        */
-    height: calc(100vh - 280px);
-    min-height: 540px;
+    /* Explicit height so the split pane fills the viewport without relying
+       on flex propagation through the grid. The formula subtracts every
+       layer of chrome above it:
+         60px  topbar
+         70px  footer  (fixed in the shell, always visible)
+         3.75rem  content top+bottom padding (1.75+2rem)
+         92px  metrics strip + its gap + mb-3
+       Total ≈ 130px + 3.75rem + 92px ≈ 280px                             */
+    height: calc(100dvh - 60px - 70px - 3.75rem - 92px);
+    min-height: 460px;
 }
 
 .pf-canvas-pane {

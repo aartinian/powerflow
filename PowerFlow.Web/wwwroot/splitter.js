@@ -7,8 +7,11 @@
 // Cytoscape doesn't auto-react to container resize, so we dispatch a
 // `pf-resize` event on every move. diagram.js listens for it and calls
 // cy.resize().
-
-let attached = false;
+//
+// Re-attach safe: when Blazor switches cases the workspace DOM is torn down and
+// rebuilt. attach() tracks the active handle element; if a different element is
+// passed it tears down the old listeners and wires up the new ones so the
+// splitter keeps working across case changes.
 
 const STORAGE_KEY = 'pf-diagram-w-pct';
 const MIN_LEFT_PX  = 360;
@@ -16,10 +19,29 @@ const MIN_RIGHT_PX = 320;
 const HANDLE_PX    = 10;
 const KEY_STEP     = 2.5;          // %, per arrow key
 
+// Track the currently-wired handle so we can detect re-mounts and clean up.
+let _handle    = null;
+let _listeners = null;   // { onDown, onMove, onUp, onDoubleClick, onKeyDown }
+
 export function attach(container, left, handle) {
     if (!container || !left || !handle) return;
-    if (attached) return;          // single-instance per page is enough
-    attached = true;
+
+    // Same element reference → already set up, nothing to do.
+    if (_handle === handle) return;
+
+    // Different element (Blazor rebuilt the DOM after a case change) →
+    // remove the stale listeners before wiring up the new ones.
+    if (_handle !== null && _listeners !== null) {
+        const { onDown, onMove, onUp, onDoubleClick, onKeyDown } = _listeners;
+        _handle.removeEventListener('pointerdown',   onDown);
+        _handle.removeEventListener('pointermove',   onMove);
+        _handle.removeEventListener('pointerup',     onUp);
+        _handle.removeEventListener('pointercancel', onUp);
+        _handle.removeEventListener('dblclick',      onDoubleClick);
+        _handle.removeEventListener('keydown',       onKeyDown);
+    }
+
+    _handle = handle;
 
     // Restore prior split percentage if the user's set one before.
     try {
@@ -97,10 +119,13 @@ export function attach(container, left, handle) {
         e.preventDefault();
     }
 
-    handle.addEventListener('pointerdown', onDown);
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointerdown',   onDown);
+    handle.addEventListener('pointermove',   onMove);
+    handle.addEventListener('pointerup',     onUp);
     handle.addEventListener('pointercancel', onUp);
-    handle.addEventListener('dblclick', onDoubleClick);
-    handle.addEventListener('keydown', onKeyDown);
+    handle.addEventListener('dblclick',      onDoubleClick);
+    handle.addEventListener('keydown',       onKeyDown);
+
+    // Store bound handlers so we can remove them if the element is replaced.
+    _listeners = { onDown, onMove, onUp, onDoubleClick, onKeyDown };
 }
