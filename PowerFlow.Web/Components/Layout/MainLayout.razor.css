@@ -143,7 +143,11 @@
 }
 
 .pf-content {
-    max-width: 1480px;
+    /* Fluid up to the viewport — the data-dense canvas earns the extra width.   */
+    /* `min(1920px, 100%)` caps it on very wide ultrawides (4K+, 27"+) where     */
+    /* edge-to-edge would feel sparse, while still using all the room on a       */
+    /* typical 1920p / 2560p monitor.                                            */
+    max-width: min(1920px, 100%);
     margin: 0 auto;
     padding: 1.75rem 2rem 2rem;
 }
@@ -156,7 +160,8 @@
     transition: background 0.2s, border-color 0.2s;
 }
 .pf-footer-inner {
-    max-width: 1480px;
+    /* Match .pf-content so footer attribution lines up with the page edges */
+    max-width: min(1920px, 100%);
     margin: 0 auto;
     padding: 1.4rem 2rem 1.6rem;
     display: flex;

@@ -3,6 +3,11 @@ let _dotNetRef = null;
 let _selectedId = null;
 let _selectedEdgeIdx = null;
 
+// External callers (e.g. the split-pane divider) can dispatch this event to
+// force Cytoscape to recompute its viewport — Cytoscape doesn't watch the
+// container element's size automatically.
+window.addEventListener('pf-resize', () => { if (cy) cy.resize(); });
+
 function isDarkMode() {
     const attr = document.documentElement.getAttribute('data-theme');
     if (attr === 'dark')  return true;

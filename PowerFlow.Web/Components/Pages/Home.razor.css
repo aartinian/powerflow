@@ -1,141 +1,458 @@
-/* ── Toolbar ───────────────────────────────────────────── */
+/* ─── App grid ─────────────────────────────────────────────────────── */
+/* Sidebar (left, sticky) + canvas (right). The whole product is a tool: */
+/* persistent configuration on one side, the work on the other.          */
 
-.pf-toolbar {
+.pf-app {
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+@media (max-width: 1080px) {
+    .pf-app {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ─── Sidebar shell ────────────────────────────────────────────────── */
+
+.pf-sidebar {
+    position: sticky;
+    top: 76px;                                  /* topbar (60) + content top padding */
+    align-self: start;
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
+    flex-direction: column;
+    gap: 0.85rem;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding-right: 0.25rem;                     /* room for the scrollbar */
+}
+@media (max-width: 1080px) {
+    .pf-sidebar {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+    }
+}
+
+/* Slim, opt-in scrollbar — present but unobtrusive */
+.pf-sidebar::-webkit-scrollbar { width: 6px; }
+.pf-sidebar::-webkit-scrollbar-track { background: transparent; }
+.pf-sidebar::-webkit-scrollbar-thumb { background: var(--pf-border); border-radius: 3px; }
+.pf-sidebar::-webkit-scrollbar-thumb:hover { background: var(--pf-border-2); }
+
+/* ─── Sidebar section card ─────────────────────────────────────────── */
+
+.pf-side-section {
     background: var(--pf-surface);
     border: 1px solid var(--pf-border);
     border-radius: var(--pf-radius);
-    padding: 0.6rem 0.9rem;
-    margin-bottom: 1.25rem;
-    box-shadow: var(--pf-shadow);
+    padding: 0.85rem 1rem 0.95rem;
+    box-shadow: var(--pf-shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
     transition: background 0.2s, border-color 0.2s;
-    flex-wrap: wrap;
+}
+.pf-side-section-warn {
+    background: color-mix(in srgb, var(--pf-warn-bg) 65%, var(--pf-surface));
+    border-color: var(--pf-warn-border);
 }
 
-.pf-toolbar-samples {
+.pf-side-h {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    flex: 1;
-    min-width: 0;
-    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--pf-text-4);
+    margin: 0;
+}
+.pf-side-h-warn {
+    color: var(--pf-warn-text);
+}
+.pf-side-h-warn svg { flex-shrink: 0; }
+.pf-side-count {
+    margin-left: auto;
+    font-family: var(--pf-mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    background: var(--pf-warn-bg);
+    color: var(--pf-warn-text);
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    letter-spacing: 0;
 }
 
-.pf-toolbar-sep {
-    width: 1px;
-    height: 1.4rem;
-    background: var(--pf-border);
-    flex-shrink: 0;
-    align-self: center;
-    transition: background 0.2s;
+/* ─── Sidebar: Case section ────────────────────────────────────────── */
+
+.pf-side-samples {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
 }
 
-.pf-file-btn {
+.pf-side-sample {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    align-items: flex-start;
+    background: var(--pf-surface-2);
+    border: 1px solid var(--pf-border);
+    border-radius: var(--pf-radius-sm);
+    padding: 0.5rem 0.65rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s, color 0.12s, transform 0.12s;
+}
+.pf-side-sample:hover:not(:disabled):not(.active) {
+    border-color: color-mix(in srgb, var(--pf-accent) 35%, var(--pf-border));
+    background: color-mix(in srgb, var(--pf-accent) 5%, var(--pf-surface-2));
+}
+.pf-side-sample.active {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--pf-accent) 18%, transparent),
+        color-mix(in srgb, var(--pf-accent) 8%, transparent));
+    border-color: color-mix(in srgb, var(--pf-accent) 50%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--pf-accent) 30%, transparent),
+                0 4px 12px -6px var(--pf-accent-glow);
+}
+.pf-side-sample:disabled { cursor: default; opacity: 0.5; }
+
+.pf-side-sample-name {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: var(--pf-text-1);
+    line-height: 1.1;
+}
+.pf-side-sample.active .pf-side-sample-name { color: var(--pf-accent); }
+
+.pf-side-sample-meta {
+    font-family: var(--pf-mono);
+    font-size: 0.66rem;
+    color: var(--pf-text-4);
+    line-height: 1.1;
+}
+
+/* ─── Sidebar: File upload (custom-styled label) ───────────────────── */
+
+.pf-side-file {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex: 0 0 auto;
-    min-width: 0;
     background: var(--pf-surface-2);
     border: 1.5px dashed var(--pf-border-2);
     border-radius: var(--pf-radius-sm);
-    padding: 0.4rem 0.85rem;
-    font-size: 0.845rem;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.82rem;
     color: var(--pf-text-3);
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
     user-select: none;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.pf-file-btn:hover {
-    background: var(--pf-surface-3, var(--pf-surface-2));
-    border-color: var(--pf-text-4);
+.pf-side-file:hover {
+    border-color: var(--pf-accent);
     color: var(--pf-text-2);
+    background: color-mix(in srgb, var(--pf-accent) 4%, var(--pf-surface-2));
 }
-.pf-file-btn input[type=file] { display: none; }
+.pf-side-file svg { flex-shrink: 0; }
 
-.pf-file-chosen {
+/* `<InputFile>` renders an <input type="file"> via a child component, so it    */
+/* doesn't inherit our scope attribute. ::deep escapes the scoped CSS.          */
+.pf-side-file ::deep input[type=file] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+.pf-side-file-chosen {
     color: var(--pf-text-1);
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
 }
 
-/* ── Sample cases (inside toolbar) ────────────────────── */
+/* ─── Sidebar: primary Run button ──────────────────────────────────── */
 
-.pf-samples-label {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--pf-text-4);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.pf-sample-btn {
+.pf-side-run {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    background: var(--pf-surface-2);
-    border: 1px solid var(--pf-border);
-    border-radius: 20px;
-    padding: 0.38rem 0.75rem;
-    font-size: 0.815rem;
-    font-weight: 500;
-    color: var(--pf-text-2);
-    cursor: pointer;
-    transition: border-color 0.12s, color 0.12s, background 0.12s;
-    white-space: nowrap;
-}
-
-.pf-sample-btn:hover:not(:disabled) {
-    border-color: var(--pf-accent);
-    color: var(--pf-accent);
-    background: color-mix(in srgb, var(--pf-accent) 7%, transparent);
-}
-
-.pf-sample-btn.active {
-    border-color: var(--pf-accent);
-    color: var(--pf-accent);
-    background: color-mix(in srgb, var(--pf-accent) 10%, transparent);
-    font-weight: 600;
-}
-
-.pf-sample-btn:disabled { opacity: 0.45; cursor: default; }
-
-.pf-sample-meta {
-    font-size: 0.68rem;
-    color: var(--pf-text-4);
-    font-weight: 400;
-}
-
-.pf-sample-btn.active .pf-sample-meta { color: var(--pf-accent); opacity: 0.7; }
-
-/* ── Solve button ──────────────────────────────────────── */
-
-.pf-solve {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
+    justify-content: center;
+    gap: 0.45rem;
     background: var(--pf-accent);
     color: #fff;
     border: none;
     border-radius: var(--pf-radius-sm);
-    padding: 0.4rem 1.1rem;
-    font-size: 0.845rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.875rem;
     font-weight: 600;
-    white-space: nowrap;
     cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
-    flex-shrink: 0;
+    transition: background 0.15s, opacity 0.15s, box-shadow 0.15s, transform 0.08s;
+    box-shadow: 0 4px 12px -4px var(--pf-accent-glow);
 }
-.pf-solve:hover:not(:disabled) { background: var(--pf-accent-hover); }
-.pf-solve:disabled { opacity: 0.45; cursor: default; }
+.pf-side-run:hover:not(:disabled) {
+    background: var(--pf-accent-hover);
+    box-shadow: 0 6px 16px -4px var(--pf-accent-glow);
+}
+.pf-side-run:active:not(:disabled) { transform: translateY(1px); }
+.pf-side-run:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
-/* ── Spinner ───────────────────────────────────────────── */
+/* ─── Sidebar: Options rows ────────────────────────────────────────── */
+
+.pf-side-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+.pf-side-row-lbl {
+    font-size: 0.78rem;
+    color: var(--pf-text-3);
+    flex-shrink: 0;
+    min-width: 4.5rem;
+}
+.pf-side-row .pf-num-input { width: auto; flex: 1; min-width: 0; }
+.pf-side-row .pf-segmented { flex: 1; }
+.pf-side-row .pf-seg { flex: 1; text-align: center; }
+
+.pf-side-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+}
+.pf-side-checks .pf-check { font-size: 0.82rem; }
+
+/* ─── Sidebar: Result widget ───────────────────────────────────────── */
+
+.pf-side-result {
+    border-left-width: 3px;
+    transition: border-color 0.2s, background 0.2s;
+}
+.pf-side-result.ok   { border-left-color: var(--pf-ok-icon); }
+.pf-side-result.fail { border-left-color: var(--pf-fail-icon); }
+
+.pf-side-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.28rem 0.6rem 0.28rem 0.5rem;
+    border-radius: 999px;
+    width: fit-content;
+}
+.pf-side-status-ok {
+    background: var(--pf-ok-icon-bg);
+    color: var(--pf-ok-icon);
+}
+.pf-side-status-fail {
+    background: var(--pf-fail-icon-bg);
+    color: var(--pf-fail-icon);
+}
+
+.pf-side-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.1rem;
+}
+.pf-side-headline-num {
+    font-family: var(--pf-mono);
+    font-size: 2.4rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--pf-text-1);
+    background: linear-gradient(135deg, var(--pf-text-1), var(--pf-text-2) 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.pf-side-headline-lbl {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--pf-text-3);
+}
+
+/* ─── Sidebar: Definition list (stats / metrics) ───────────────────── */
+
+.pf-side-dl {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    column-gap: 0.85rem;
+    row-gap: 0.32rem;
+    margin: 0;
+    font-size: 0.8rem;
+}
+.pf-side-dl dt {
+    color: var(--pf-text-4);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    align-self: center;
+    white-space: nowrap;
+}
+.pf-side-dl dd {
+    margin: 0;
+    color: var(--pf-text-1);
+    font-weight: 500;
+    text-align: right;
+    overflow-wrap: anywhere;
+    /* Tabular numerics inside dd values */
+    font-variant-numeric: tabular-nums;
+}
+.pf-side-dl dd code {
+    font-family: var(--pf-mono);
+    font-size: 0.78rem;
+    background: none;
+    padding: 0;
+    border: 0;
+    color: var(--pf-text-2);
+}
+
+/* Highlighted numeric value inside dd */
+.pf-side-num {
+    font-family: var(--pf-mono);
+    font-weight: 500;
+    color: var(--pf-text-1);
+    font-size: 0.86rem;
+}
+
+/* Bus-type chips row (in metrics dd) */
+.pf-side-bus-row {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Voltage-range / max-load colour modifiers (used by VoltageRangeClass / MaxLoadClass) */
+.pf-metric-warn   .pf-side-num,
+.pf-metric-warn   { color: #d97706; }
+.pf-metric-danger .pf-side-num,
+.pf-metric-danger { color: #dc2626; }
+
+/* ─── Sidebar: Lists (warnings / violations) ───────────────────────── */
+
+.pf-side-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+}
+.pf-side-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.55rem;
+    background: var(--pf-surface-2);
+    border-radius: var(--pf-radius-xs);
+    border: 1px solid var(--pf-border);
+}
+.pf-side-section-warn .pf-side-list li {
+    background: color-mix(in srgb, var(--pf-warn-bg) 50%, var(--pf-surface));
+    border-color: color-mix(in srgb, var(--pf-warn-border) 50%, var(--pf-border));
+}
+
+.pf-side-list-code {
+    font-family: var(--pf-mono);
+    font-size: 0.7rem;
+    color: var(--pf-text-3);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.pf-side-list-msg {
+    color: var(--pf-text-2);
+    font-size: 0.75rem;
+    line-height: 1.35;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Voltage-violation list rows (different layout than warning rows) */
+.pf-side-list-viol li {
+    justify-content: space-between;
+}
+.pf-side-viol-bus {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--pf-text-2);
+}
+.pf-side-viol-val {
+    font-family: var(--pf-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+.pf-side-viol-val.over  { color: #d97706; }
+.pf-side-viol-val.under { color: #dc2626; }
+
+/* ─── Canvas shell ─────────────────────────────────────────────────── */
+
+.pf-canvas {
+    min-width: 0;       /* lets grid items shrink properly */
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* ─── Canvas: busy state ───────────────────────────────────────────── */
+
+.pf-canvas-busy {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.pf-canvas-busy-head {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 1.1rem 1.25rem;
+    border-bottom: 1px solid var(--pf-border);
+}
+.pf-canvas-busy-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--pf-text-1);
+}
+.pf-canvas-busy-sub {
+    font-size: 0.78rem;
+    color: var(--pf-text-3);
+    margin-top: 0.1rem;
+}
+
+/* ─── Canvas: diagram panel ────────────────────────────────────────── */
+
+.pf-canvas-diag {
+    box-shadow: var(--pf-shadow);
+}
+
+/* ───────────────────────────────────────────────────────────────────── */
+/* Common building blocks (kept from the old design — used by both the   */
+/* sidebar and canvas).                                                   */
+/* ───────────────────────────────────────────────────────────────────── */
+
+/* ─── Spinner ──────────────────────────────────────────────────────── */
 
 .pf-spinner {
     display: inline-block;
@@ -147,20 +464,22 @@
     flex-shrink: 0;
 }
 .pf-spinner-lg {
-    width: 18px; height: 18px;
+    width: 22px; height: 22px;
+    border-width: 2.5px;
     border-color: rgba(37,99,235,0.2);
     border-top-color: var(--pf-accent);
 }
 @keyframes pf-spin { to { transform: rotate(360deg); } }
 
-/* ── Empty state ───────────────────────────────────────── */
+/* ─── Empty state ──────────────────────────────────────────────────── */
 
 .pf-empty {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 50vh;
-    padding: 2rem;
+    min-height: 60vh;
+    padding: 3rem 2rem;
+    box-shadow: var(--pf-shadow-sm);
 }
 .pf-empty-inner { text-align: center; max-width: 520px; }
 
@@ -180,7 +499,7 @@
 }
 
 .pf-empty-title {
-    font-size: 1.5rem;
+    font-size: 1.55rem;
     font-weight: 700;
     color: var(--pf-text-1);
     margin: 0 0 0.45rem;
@@ -200,8 +519,6 @@
     font-size: 0.85em;
     color: var(--pf-text-2);
 }
-
-/* Capability chips: a confident "what this product does" line. */
 .pf-empty-chips {
     display: flex;
     flex-wrap: wrap;
@@ -216,62 +533,44 @@
     font-size: 0.75rem;
     font-weight: 500;
     color: var(--pf-text-3);
-    background: var(--pf-surface);
+    background: var(--pf-surface-2);
     border: 1px solid var(--pf-border);
     border-radius: 999px;
     padding: 0.32rem 0.7rem 0.32rem 0.55rem;
     transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
-.pf-empty-chip svg {
-    color: var(--pf-accent);
-    flex-shrink: 0;
-}
+.pf-empty-chip svg { color: var(--pf-accent); flex-shrink: 0; }
 .pf-empty-chip:hover {
     border-color: color-mix(in srgb, var(--pf-accent) 30%, var(--pf-border));
     color: var(--pf-text-2);
 }
 
-/* ── Solving placeholder ───────────────────────────────── */
-
-.pf-solving-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.65rem;
-    min-height: 140px;
-    background: var(--pf-surface);
-    border: 1px solid var(--pf-border);
-    border-radius: var(--pf-radius);
-    color: var(--pf-text-3);
-    font-size: 0.9rem;
-}
-
-/* ── Panel ─────────────────────────────────────────────── */
+/* ─── Panel ────────────────────────────────────────────────────────── */
 
 .pf-panel {
     background: var(--pf-surface);
     border: 1px solid var(--pf-border);
     border-radius: var(--pf-radius);
     overflow: hidden;
-    box-shadow: var(--pf-shadow);
+    box-shadow: var(--pf-shadow-sm);
     transition: background 0.2s, border-color 0.2s;
 }
 
-/* ── Section head (Diagram title row) ──────────────────── */
+/* ─── Section head (panel title row) ───────────────────────────────── */
 
 .pf-section-head {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.6rem 1rem;
+    padding: 0.65rem 1rem;
     border-bottom: 1px solid var(--pf-border);
     background: var(--pf-surface-2);
     transition: background 0.2s, border-color 0.2s;
 }
 .pf-section-title {
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--pf-text-3);
 }
@@ -281,133 +580,23 @@
 }
 .pf-section-note { font-style: italic; }
 
-/* ── Hero result card ──────────────────────────────────── */
-/* Confident, data-forward replacement for the old status banner.        */
-/* Layout: state pill on the left, big tabular iteration count as the    */
-/* headline, supporting metrics on the right. Adapts down on mobile.     */
+.pf-section-head-warn {
+    background: var(--pf-warn-bg);
+    border-color: var(--pf-warn-border);
+    color: var(--pf-warn-text);
+}
+.pf-section-head-warn .pf-section-title { color: var(--pf-warn-text); }
+.pf-section-head-warn svg { color: var(--pf-warn-text); flex-shrink: 0; }
 
-.pf-hero {
-    background: var(--pf-surface);
-    border: 1px solid var(--pf-border);
-    border-radius: var(--pf-radius);
-    padding: 1.1rem 1.25rem;
-    box-shadow: var(--pf-shadow-sm);
-    /* Accent bar on the left edge — semantic colour without painting the whole card */
-    border-left-width: 3px;
-    transition: background 0.2s, border-color 0.2s;
+.pf-section-head-fail {
+    background: var(--pf-fail-bg);
+    border-color: var(--pf-fail-border);
+    color: var(--pf-fail-text);
 }
-.pf-hero-ok   { border-left-color: var(--pf-ok-icon); }
-.pf-hero-fail { border-left-color: var(--pf-fail-icon); }
+.pf-section-head-fail .pf-section-title { color: var(--pf-fail-text); }
+.pf-section-head-fail svg { color: var(--pf-fail-text); flex-shrink: 0; }
 
-.pf-hero-row {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-}
-
-/* Left: state pill ─ small, definitive */
-.pf-hero-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.32rem 0.7rem 0.32rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    flex-shrink: 0;
-}
-.pf-hero-ok   .pf-hero-pill { background: var(--pf-ok-icon-bg);   color: var(--pf-ok-icon); }
-.pf-hero-fail .pf-hero-pill { background: var(--pf-fail-icon-bg); color: var(--pf-fail-icon); }
-
-/* Middle: big number + label */
-.pf-hero-headline {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 0.55rem;
-    flex: 1;
-    min-width: 0;
-    flex-wrap: wrap;
-}
-.pf-hero-num {
-    font-family: var(--pf-mono);
-    font-size: 2.1rem;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: -0.025em;
-    color: var(--pf-text-1);
-    /* Subtle accent gradient on the digits — confident without being loud */
-    background: linear-gradient(135deg, var(--pf-text-1), var(--pf-text-2) 80%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-.pf-hero-num-sm { font-size: 1.5rem; font-weight: 600; }
-.pf-hero-num-lbl {
-    font-size: 0.86rem;
-    font-weight: 500;
-    color: var(--pf-text-3);
-    letter-spacing: -0.005em;
-}
-.pf-hero-num-lbl-em { color: var(--pf-text-2); font-weight: 500; }
-.pf-hero-divider {
-    width: 1px;
-    align-self: stretch;
-    background: var(--pf-border);
-    margin: 0.15rem 0.3rem;
-}
-
-/* Right: supporting stats */
-.pf-hero-stats {
-    display: inline-flex;
-    align-items: center;
-    gap: 1.5rem;
-    flex-shrink: 0;
-}
-.pf-hero-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    line-height: 1.1;
-}
-.pf-hero-stat-lbl {
-    font-size: 0.66rem;
-    font-weight: 600;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--pf-text-4);
-}
-.pf-hero-stat-val {
-    font-family: var(--pf-mono);
-    font-size: 0.86rem;
-    font-weight: 500;
-    color: var(--pf-text-2);
-    background: none;
-    border: none;
-    padding: 0;
-}
-
-.pf-hero-extra {
-    margin-top: 0.85rem;
-    padding-top: 0.85rem;
-    border-top: 1px dashed var(--pf-border);
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-    font-size: 0.8rem;
-}
-
-@media (max-width: 720px) {
-    .pf-hero-row { gap: 0.9rem; }
-    .pf-hero-stats { gap: 1rem; }
-    .pf-hero-num { font-size: 1.7rem; }
-    .pf-hero-divider { display: none; }
-}
-
-/* ── Banners ───────────────────────────────────────────── */
+/* ─── Banners ──────────────────────────────────────────────────────── */
 
 .pf-banner {
     border-radius: var(--pf-radius-sm);
@@ -418,7 +607,7 @@
 .pf-fail     { background: var(--pf-fail-bg);  border-color: var(--pf-fail-border); color: var(--pf-fail-text); }
 .pf-warn-box { background: var(--pf-warn-bg);  border-color: var(--pf-warn-border); color: var(--pf-warn-text); }
 
-/* ── Tabs ──────────────────────────────────────────────── */
+/* ─── Tabs ─────────────────────────────────────────────────────────── */
 
 .pf-tabs {
     display: flex;
@@ -442,7 +631,7 @@
     margin-bottom: -1px;
     transition: color 0.12s, border-color 0.12s;
 }
-.pf-tab.active      { color: var(--pf-accent); border-bottom-color: var(--pf-accent); }
+.pf-tab.active            { color: var(--pf-accent); border-bottom-color: var(--pf-accent); }
 .pf-tab:hover:not(.active) { color: var(--pf-text-2); }
 
 .pf-tab-count {
@@ -451,18 +640,21 @@
     justify-content: center;
     background: var(--pf-surface-2);
     color: var(--pf-text-4);
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-family: var(--pf-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
     border-radius: 20px;
     padding: 0.05rem 0.45rem;
     min-width: 1.5em;
     transition: background 0.12s;
 }
-.pf-tab.active .pf-tab-count { background: color-mix(in srgb, var(--pf-accent) 15%, transparent); color: var(--pf-accent); }
+.pf-tab.active .pf-tab-count {
+    background: color-mix(in srgb, var(--pf-accent) 15%, transparent);
+    color: var(--pf-accent);
+}
 
-/* ── Tables ────────────────────────────────────────────── */
+/* ─── Tables ───────────────────────────────────────────────────────── */
 
-/* Override Bootstrap's hard-coded white table background */
 .pf-tbl {
     --bs-table-bg: transparent;
     --bs-table-color: var(--pf-text-2);
@@ -471,7 +663,6 @@
     --bs-table-hover-color: var(--pf-text-1);
     color: var(--pf-text-2);
 }
-
 .pf-tbl-wrap {
     max-height: 500px;
     overflow-y: auto;
@@ -517,7 +708,7 @@
 .pf-badge-ok  { background: #dcfce7; color: #166534; }
 .pf-badge-off { background: var(--pf-surface-2); color: var(--pf-text-4); }
 
-[data-theme="dark"] .pf-badge-ok,
+[data-theme="dark"] .pf-badge-ok { background: #052e16; color: #4ade80; }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .pf-badge-ok {
         background: #052e16;
@@ -525,76 +716,34 @@
     }
 }
 
-/* ── Solver log (bottom drawer) ────────────────────────── */
-
-.pf-log-panel {
-    border-left: 3px solid var(--pf-log-accent);
-    transition: border-color 0.2s;
-}
-
-.pf-log-header {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    background: var(--pf-log-header);
-    padding: 0.55rem 0.9rem;
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.12s;
-}
-.pf-log-header:hover { filter: brightness(1.12); }
-
-.pf-log-label {
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--pf-text-4);
-}
-.pf-log-count {
-    font-size: 0.68rem;
-    font-weight: 500;
-    color: var(--pf-text-4);
-    padding: 0.05rem 0.4rem;
-    background: rgba(255,255,255,0.06);
-    border-radius: 10px;
-}
-.pf-log-preview {
-    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
-    font-size: 0.72rem;
-    color: var(--pf-log-text);
-    opacity: 0.7;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 0;
-}
-
-.pf-chevron { margin-left: auto; color: var(--pf-text-4); transition: transform 0.18s ease; flex-shrink: 0; }
-.pf-chevron-open { transform: rotate(180deg); }
+/* ─── Solver log (used inline in busy state and as a tab body) ─────── */
 
 .pf-log {
     background: var(--pf-log-bg);
     color: var(--pf-log-text);
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.75rem;
+    font-family: var(--pf-mono);
+    font-size: 0.76rem;
     line-height: 1.7;
-    height: 340px;
     overflow-y: auto;
     padding: 0.85rem 1rem;
     transition: background 0.2s, color 0.2s;
 }
 .pf-log .pf-warn { color: var(--pf-log-warn); }
 
-.pf-log-waiting {
-    color: var(--pf-text-4);
-    font-style: italic;
-    animation: pf-pulse 1.4s ease-in-out infinite;
+/* Inline log inside the busy panel — fixed-height streaming view */
+.pf-log-canvas {
+    max-height: 340px;
+    border-bottom-left-radius: var(--pf-radius);
+    border-bottom-right-radius: var(--pf-radius);
 }
-@keyframes pf-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
-/* ── Icon button (section-head actions) ────────────────── */
+/* Log shown inside the post-solve tab strip */
+.pf-log-tab {
+    max-height: 500px;
+    border-radius: 0;
+}
+
+/* ─── Icon button (section-head actions) ───────────────────────────── */
 
 .pf-icon-btn {
     display: inline-flex;
@@ -614,29 +763,33 @@
 }
 .pf-icon-btn:hover { border-color: var(--pf-accent); color: var(--pf-accent); }
 
-/* ── Diagram ───────────────────────────────────────────── */
+/* ─── Diagram ──────────────────────────────────────────────────────── */
 
 .pf-diagram-wrap {
     position: relative;
 }
-
 .pf-diagram {
     height: 520px;
     background: var(--pf-surface-2);
     transition: background 0.2s;
 }
+/* Larger diagram for the canvas hero treatment */
+.pf-diagram-wrap-tall .pf-diagram {
+    height: min(640px, calc(100vh - 200px));
+    min-height: 460px;
+}
 
-/* ── Node popover ──────────────────────────────────────── */
+/* ─── Node popover ─────────────────────────────────────────────────── */
 
 .pf-node-popover {
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
-    width: 210px;
+    width: 220px;
     background: var(--pf-surface);
     border: 1px solid var(--pf-border);
     border-radius: var(--pf-radius);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+    box-shadow: var(--pf-shadow-md);
     z-index: 10;
     overflow: hidden;
     animation: pf-popover-in 0.12s ease;
@@ -656,20 +809,17 @@
     background: var(--pf-surface-2);
     transition: background 0.2s, border-color 0.2s;
 }
-
 .pf-npo-title {
     font-size: 0.9rem;
     font-weight: 700;
     color: var(--pf-text-1);
     flex: 1;
 }
-
 .pf-npo-close {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 22px; height: 22px;
     background: none;
     border: none;
     border-radius: 4px;
@@ -687,7 +837,6 @@
     row-gap: 0;
     padding: 0.5rem 0.75rem 0.65rem;
 }
-
 .pf-npo-lbl {
     font-size: 0.72rem;
     font-weight: 600;
@@ -697,24 +846,51 @@
     padding: 0.22rem 0.6rem 0.22rem 0;
     white-space: nowrap;
 }
-
 .pf-npo-val {
     font-size: 0.82rem;
     color: var(--pf-text-2);
     font-variant-numeric: tabular-nums;
     padding: 0.22rem 0;
 }
-
 .pf-npo-sep {
     height: 0.4rem;
     grid-column: span 1;
 }
 
-/* Isolated bus chip variant */
+/* ─── Bus-type chips ───────────────────────────────────────────────── */
+
+.pf-bus-chip {
+    display: inline-block;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+.pf-bus-slack {
+    background: color-mix(in srgb, var(--pf-accent) 14%, transparent);
+    color: var(--pf-accent);
+}
+.pf-bus-pv {
+    background: color-mix(in srgb, #f59e0b 16%, transparent);
+    color: #b45309;
+}
+.pf-bus-pq {
+    background: var(--pf-surface-2);
+    color: var(--pf-text-3);
+}
 .pf-bus-isolated {
     background: var(--pf-surface-2);
     color: var(--pf-text-4);
 }
+
+[data-theme="dark"] .pf-bus-pv { color: #fbbf24; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pf-bus-pv { color: #fbbf24; }
+}
+
+/* ─── Legend ───────────────────────────────────────────────────────── */
 
 .pf-legend {
     display: flex;
@@ -739,23 +915,7 @@
 .pf-legend-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .pf-legend-line { width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0; }
 
-/* ── Violations panel ──────────────────────────────────── */
-
-.pf-section-head-warn {
-    background: var(--pf-warn-bg);
-    border-color: var(--pf-warn-border);
-    color: var(--pf-warn-text);
-}
-.pf-section-head-warn .pf-section-title { color: var(--pf-warn-text); }
-.pf-section-head-warn svg { color: var(--pf-warn-text); flex-shrink: 0; }
-
-.pf-section-head-fail {
-    background: var(--pf-fail-bg);
-    border-color: var(--pf-fail-border);
-    color: var(--pf-fail-text);
-}
-.pf-section-head-fail .pf-section-title { color: var(--pf-fail-text); }
-.pf-section-head-fail svg { color: var(--pf-fail-text); flex-shrink: 0; }
+/* ─── Voltage-violation badges ─────────────────────────────────────── */
 
 .pf-vbadge {
     display: inline-block;
@@ -769,141 +929,7 @@
 .pf-vbadge-over  { background: var(--pf-warn-bg);  color: var(--pf-warn-text); }
 .pf-vbadge-under { background: var(--pf-fail-bg);  color: var(--pf-fail-text); }
 
-/* ── Summary metrics bar ───────────────────────────────── */
-
-.pf-metrics {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-}
-
-.pf-metric {
-    padding: 0.9rem 1rem;
-    border-right: 1px solid var(--pf-border);
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    transition: border-color 0.2s;
-}
-.pf-metric:last-child { border-right: none; }
-
-.pf-metric-row {
-    display: flex;
-    align-items: baseline;
-    gap: 0.3rem;
-    min-width: 0;
-}
-
-.pf-metric-num {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: var(--pf-text-1);
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    white-space: nowrap;
-    transition: color 0.2s;
-}
-.pf-metric-num-sm { font-size: 0.975rem; }
-
-.pf-metric-unit {
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--pf-text-4);
-    flex-shrink: 0;
-    transition: color 0.2s;
-}
-
-.pf-metric-lbl {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--pf-text-4);
-}
-
-/* Color states */
-.pf-metric-warn   .pf-metric-num  { color: #d97706; }
-.pf-metric-warn   .pf-metric-unit { color: #d97706; opacity: 0.75; }
-.pf-metric-danger .pf-metric-num  { color: #dc2626; }
-.pf-metric-danger .pf-metric-unit { color: #dc2626; opacity: 0.75; }
-
-/* Bus breakdown chips */
-.pf-metric-buses {
-    display: flex;
-    gap: 0.3rem;
-    flex-wrap: wrap;
-    align-items: center;
-    min-height: 1.3rem; /* match single-line num height */
-}
-
-.pf-bus-chip {
-    display: inline-block;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    padding: 0.15rem 0.45rem;
-    border-radius: 20px;
-    white-space: nowrap;
-}
-.pf-bus-slack {
-    background: color-mix(in srgb, var(--pf-accent) 14%, transparent);
-    color: var(--pf-accent);
-}
-.pf-bus-pv {
-    background: color-mix(in srgb, #f59e0b 16%, transparent);
-    color: #b45309;
-}
-.pf-bus-pq {
-    background: var(--pf-surface-2);
-    color: var(--pf-text-3);
-}
-
-[data-theme="dark"] .pf-bus-pv { color: #fbbf24; }
-
-@media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .pf-bus-pv { color: #fbbf24; }
-}
-
-/* Responsive: 3-col on narrow screens */
-@media (max-width: 680px) {
-    .pf-metrics { grid-template-columns: repeat(3, 1fr); }
-    .pf-metric:nth-child(3) { border-right: none; }
-    .pf-metric:nth-child(4),
-    .pf-metric:nth-child(5),
-    .pf-metric:nth-child(6) { border-top: 1px solid var(--pf-border); }
-    .pf-metric:nth-child(6) { border-right: none; }
-}
-
-/* ── Solver options panel ──────────────────────────────── */
-
-.pf-options {
-    padding: 0.55rem 0.9rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-.pf-options-row {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-    min-height: 1.9rem;
-}
-.pf-options-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--pf-text-3);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    flex-shrink: 0;
-}
-.pf-options-sep {
-    width: 1px;
-    height: 1.2rem;
-    background: var(--pf-border);
-    margin: 0 0.15rem;
-    flex-shrink: 0;
-    transition: background 0.2s;
-}
+/* ─── Segmented control + checkbox + numeric input (used by sidebar) ─ */
 
 .pf-segmented {
     display: inline-flex;
@@ -916,7 +942,7 @@
 .pf-seg {
     background: none;
     border: none;
-    padding: 0.32rem 0.85rem;
+    padding: 0.34rem 0.85rem;
     font-size: 0.825rem;
     font-weight: 500;
     color: var(--pf-text-3);
@@ -924,11 +950,11 @@
     transition: background 0.12s, color 0.12s;
 }
 .pf-seg:hover:not(.active):not(:disabled) {
-    background: var(--pf-surface-3, var(--pf-surface));
+    background: var(--pf-surface);
     color: var(--pf-text-1);
 }
 .pf-seg.active {
-    background: var(--pf-accent, #2563eb);
+    background: var(--pf-accent);
     color: white;
 }
 .pf-seg:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -939,7 +965,7 @@
 .pf-check {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
     font-size: 0.825rem;
     color: var(--pf-text-2);
     cursor: pointer;
@@ -948,7 +974,9 @@
 .pf-check input[type="checkbox"] {
     margin: 0;
     cursor: pointer;
-    accent-color: var(--pf-accent, #2563eb);
+    accent-color: var(--pf-accent);
+    width: 14px;
+    height: 14px;
 }
 .pf-check input[type="checkbox"]:disabled { cursor: not-allowed; }
 .pf-check:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
@@ -958,19 +986,19 @@
     background: var(--pf-surface-2);
     border: 1px solid var(--pf-border);
     border-radius: var(--pf-radius-sm);
-    padding: 0.28rem 0.5rem;
+    padding: 0.32rem 0.55rem;
     font-size: 0.825rem;
-    font-family: var(--pf-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-family: var(--pf-mono);
     color: var(--pf-text-1);
     transition: border-color 0.12s, background 0.2s;
 }
 .pf-num-input:focus {
     outline: none;
-    border-color: var(--pf-accent, #2563eb);
+    border-color: var(--pf-accent);
 }
 .pf-num-input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Distributed-slack λ pill (sits inside .pf-hero-extra) ─ */
+/* ─── Pill (e.g. distributed-slack λ) ──────────────────────────────── */
 
 .pf-pill {
     display: inline-flex;
@@ -979,11 +1007,280 @@
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 600;
-    font-family: var(--pf-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-family: var(--pf-mono);
     letter-spacing: 0.01em;
 }
 .pf-pill-accent {
-    background: color-mix(in srgb, var(--pf-accent, #2563eb) 18%, transparent);
-    color: var(--pf-accent, #2563eb);
-    border: 1px solid color-mix(in srgb, var(--pf-accent, #2563eb) 35%, transparent);
+    background: color-mix(in srgb, var(--pf-accent) 18%, transparent);
+    color: var(--pf-accent);
+    border: 1px solid color-mix(in srgb, var(--pf-accent) 35%, transparent);
+}
+
+/* ─── Violations panel (full-width, used for blocking validation errors) */
+
+.pf-violations { box-shadow: var(--pf-shadow-sm); }
+
+/* ─── Canvas metrics strip ─────────────────────────────────────────── */
+/* Horizontal six-tile bar above the diagram. Hoisted out of the sidebar  */
+/* so post-solve totals are always in view alongside the network — the    */
+/* sidebar then holds only solver controls + per-iteration diagnostics.   */
+
+.pf-metrics-bar {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.pf-metrics-bar:has(.pf-metric:nth-child(4):last-child) {
+    /* DC mode has 4 tiles instead of 6 */
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pf-metric {
+    padding: 0.85rem 1.1rem;
+    border-right: 1px solid var(--pf-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.32rem;
+    transition: border-color 0.2s;
+    min-width: 0;
+}
+.pf-metric:last-child { border-right: none; }
+
+.pf-metric-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.pf-metric-num {
+    font-family: var(--pf-mono);
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--pf-text-1);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    transition: color 0.2s;
+    /* gradient text-clip mirrors the sidebar headline number */
+    background: linear-gradient(135deg, var(--pf-text-1), var(--pf-text-2) 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.pf-metric-num-sm   { font-size: 1.05rem; letter-spacing: -0.015em; }
+.pf-metric-num-muted {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--pf-text-4);
+    -webkit-text-fill-color: var(--pf-text-4);
+    background: none;
+}
+.pf-metric-unit {
+    font-family: var(--pf-mono);
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--pf-text-4);
+    flex-shrink: 0;
+    transition: color 0.2s;
+}
+.pf-metric-extra {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--pf-text-4);
+    margin-left: auto;
+    padding-left: 0.4rem;
+}
+.pf-metric-lbl {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pf-text-4);
+}
+
+/* Metric colour states (set on the .pf-metric wrapper)                  */
+/* Override the gradient clip so warn/danger colour shows on the digits. */
+.pf-metric-warn .pf-metric-num,
+.pf-metric-danger .pf-metric-num {
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+}
+.pf-metric-warn .pf-metric-num,
+.pf-metric-warn .pf-metric-unit  { color: #d97706; -webkit-text-fill-color: #d97706; }
+.pf-metric-danger .pf-metric-num,
+.pf-metric-danger .pf-metric-unit { color: #dc2626; -webkit-text-fill-color: #dc2626; }
+
+/* Bus-type chips row (last metric tile) */
+.pf-metric-buses {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    align-items: center;
+    min-height: 1.4rem;             /* match single-line numeric height */
+}
+
+/* Responsive: 3 cols on narrow viewports, 2 cols on phones */
+@media (max-width: 980px) {
+    .pf-metrics-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pf-metric:nth-child(3) { border-right: none; }
+    .pf-metric:nth-child(n+4) { border-top: 1px solid var(--pf-border); }
+    .pf-metric:nth-child(6) { border-right: none; }
+    .pf-metrics-bar:has(.pf-metric:nth-child(4):last-child) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 540px) {
+    .pf-metrics-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pf-metric { border-right-width: 0 !important; }
+    .pf-metric:nth-child(odd) { border-right-width: 1px !important; }
+    .pf-metric:nth-child(n+3) { border-top: 1px solid var(--pf-border); }
+}
+
+/* ─── Warn-tinted tab (Violations) ─────────────────────────────────── */
+/* Same shape as a regular .pf-tab but with warning-coloured count badge   */
+/* and active state — communicates "these are issues" without shouting.   */
+
+.pf-tab-warn { gap: 0.35rem; }
+.pf-tab-warn svg { color: var(--pf-warn-text); flex-shrink: 0; opacity: 0.85; }
+.pf-tab-warn:hover:not(.active) { color: var(--pf-warn-text); }
+.pf-tab-warn.active {
+    color: var(--pf-warn-text);
+    border-bottom-color: var(--pf-warn-border);
+}
+.pf-tab-warn.active svg { opacity: 1; }
+
+.pf-tab-count-warn {
+    background: var(--pf-warn-bg);
+    color: var(--pf-warn-text);
+}
+.pf-tab-warn.active .pf-tab-count-warn {
+    background: color-mix(in srgb, var(--pf-warn-text) 18%, transparent);
+}
+
+/* ─── Split pane (diagram on left, tables on right, draggable divider) ─── */
+/* Container reserves a fixed slice of the viewport. Left pane's width       */
+/* (set inline as a percentage by splitter.js) controls the split; the       */
+/* right pane fills the remainder with flex:1.                                */
+/*                                                                            */
+/* IMPORTANT: the left pane uses `flex: 0 0 auto` (NOT `flex: 0 0 60%`) so    */
+/* the explicit `width` property — both the CSS default and the JS-mutated   */
+/* inline value — actually controls the size. Setting flex-basis to a length */
+/* would override the inline width, breaking the drag.                        */
+
+.pf-canvas-split {
+    display: flex;
+    flex-direction: row;
+    /* Fill the remaining viewport from this point down. The 280px subtracts  */
+    /* topbar + content padding + metrics-bar + footer breathing-room.        */
+    height: calc(100vh - 280px);
+    min-height: 540px;
+}
+
+.pf-canvas-pane {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;        /* lets flex children shrink below their content width */
+}
+.pf-canvas-pane > .pf-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;            /* splitter handle provides the visual separation */
+}
+
+/* Left pane — default 60% to the diagram. Inline `width` (in %) wins when   */
+/* the user drags the splitter; on first load this CSS rule applies.          */
+.pf-canvas-pane-left {
+    flex: 0 0 auto;       /* let `width` decide; don't grow/shrink under flex */
+    width: 60%;
+    min-width: 360px;
+}
+.pf-canvas-pane-left .pf-canvas-diag .pf-diagram-wrap {
+    flex: 1;
+    min-height: 0;
+}
+.pf-canvas-pane-left .pf-canvas-diag .pf-diagram {
+    height: 100%;
+}
+
+/* Right pane — flex:1 takes whatever's left after the left pane */
+.pf-canvas-pane-right {
+    flex: 1 1 0;
+    min-width: 320px;
+}
+.pf-canvas-pane-right .pf-tabs { flex-shrink: 0; }
+.pf-canvas-pane-right .pf-tbl-wrap {
+    flex: 1;
+    max-height: none;     /* override the default 500px cap from the global rule */
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* ─── Splitter handle (vertical line, drags horizontally) ──────────── */
+
+.pf-splitter {
+    width: 10px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+    margin: 0 0.4rem;
+    user-select: none;
+    transition: background 0.15s;
+    outline: none;
+    border-radius: 5px;
+    align-self: stretch;
+}
+.pf-splitter:hover,
+.pf-splitter:focus-visible {
+    background: color-mix(in srgb, var(--pf-accent) 10%, transparent);
+}
+.pf-splitter-grip {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 40px;
+    background: var(--pf-border-2);
+    border-radius: 2px;
+    transition: background 0.15s, height 0.15s;
+}
+.pf-splitter:hover .pf-splitter-grip,
+.pf-splitter:focus-visible .pf-splitter-grip {
+    background: var(--pf-accent);
+    height: 56px;
+}
+
+/* While the user is dragging the splitter, suppress text selection and       */
+/* force col-resize cursor everywhere — otherwise the cursor flickers as it  */
+/* moves over child elements with their own cursor styles.                    */
+.pf-resizing,
+.pf-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Mobile / narrow viewport: stack panes vertically, hide the splitter.       */
+/* Above 1080px the sidebar+canvas grid is already side-by-side; below that   */
+/* the canvas goes single-column and an in-canvas left/right split would be   */
+/* untenable on narrow screens.                                                */
+@media (max-width: 1080px) {
+    .pf-canvas-split {
+        flex-direction: column;
+        height: auto;
+        min-height: 0;
+    }
+    .pf-canvas-pane-left,
+    .pf-canvas-pane-right {
+        width: 100%;
+        min-width: 0;
+        flex: 0 0 auto;
+    }
+    .pf-canvas-pane-left { min-height: 480px; }
+    .pf-canvas-pane-right { min-height: 320px; margin-top: 1rem; }
+    .pf-splitter { display: none; }
 }
