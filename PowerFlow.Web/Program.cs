@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using PowerFlow.Web.Components;
 using PowerFlow.Web.Middleware;
@@ -24,6 +25,22 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownProxies.Clear();
 });
 
+// Persist Data Protection keys to a stable on-disk location. Without this,
+// every container restart generates a fresh key ring — which means every
+// browser's antiforgery cookie from the previous run can no longer be
+// decrypted, surfacing as repeated `AntiforgeryValidationException: The
+// key {…} was not found in the key ring` errors and a broken Blazor
+// circuit on first interaction after a deploy / auto-stop. /data is the
+// Fly volume mount (see fly.toml [mounts]); locally the directory is
+// created on demand under the project content root so dev still works.
+var keysDir = Directory.Exists("/data")
+    ? "/data/keys"
+    : Path.Combine(builder.Environment.ContentRootPath, ".keys");
+Directory.CreateDirectory(keysDir);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
+    .SetApplicationName("PowerFlow.Web");
+
 var app = builder.Build();
 
 // MUST run before anything that inspects scheme/host (auth, antiforgery,
@@ -49,8 +66,19 @@ app.MapGet("/healthz", () => Results.Ok("ok"))
 // stays gated until the user authenticates.
 app.UseMiddleware<SimpleAuthMiddleware>();
 
+// Serve files from wwwroot directly via middleware. This is a belt-and-
+// braces fallback to MapStaticAssets() below: in production on Fly the
+// static-assets manifest can fail to load (the framework JS at
+// /_framework/blazor.web.js was 404'ing, killing all Blazor interactivity).
+// UseStaticFiles needs nothing but the on-disk file, so it always works
+// for the bare-named files that ship in the publish output.
+app.UseStaticFiles();
+
 app.UseAntiforgery();
 
+// Endpoint-based static assets: serves fingerprinted/manifest-only routes
+// (e.g. /_framework/blazor.web.<hash>.js) when MapStaticAssets is healthy.
+// Disk-backed paths are already handled by UseStaticFiles above.
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -2,12 +2,12 @@
 #
 # After editing `app` to your preferred name, deploy with:
 #   flyctl auth login
-#   flyctl apps create powerflow-web      # only needed once
+#   flyctl apps create powerflow      # only needed once
 #   flyctl deploy
 #
 # `flyctl launch` will accept this file directly; no further prompts.
 
-app = "powerflow-web"
+app = "powerflow"
 primary_region = "ams"                    # Amsterdam — closest to user
 
 # ─── Build ───────────────────────────────────────────────────────
@@ -30,13 +30,14 @@ primary_region = "ams"                    # Amsterdam — closest to user
   internal_port = 8080
   force_https = true                      # Fly terminates TLS at the edge
 
-  # Auto-stop saves cost: the machine stops when idle and starts again
-  # on the next request (cold start ~1–2 s). For a single-user demo
-  # this is the right trade-off; bump min_machines_running to 1 if
-  # you'd rather keep it warm.
+  # Keep one machine warm. With min_machines_running = 0 the machine
+  # stops on idle, and Blazor Server's circuit (a SignalR WebSocket)
+  # gets killed mid-session — clicks then silently no-op until the
+  # browser reconnects. Costs a few cents a day to avoid that class
+  # of bug entirely.
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   # Blazor Server holds a SignalR connection per browser tab.
   # 200 hard / 100 soft is generous for a personal demo.
@@ -54,6 +55,18 @@ primary_region = "ams"                    # Amsterdam — closest to user
     method = "GET"
     timeout = "5s"
     path = "/healthz"
+
+# ─── Persistent storage ──────────────────────────────────────────
+# Holds ASP.NET Data Protection keys so the antiforgery / cookie
+# encryption keys survive container restarts and deploys. Without
+# this, every restart invalidates all in-flight Blazor circuits and
+# logs a stream of "key not found in key ring" exceptions.
+#
+# Create the volume once before the first deploy:
+#   fly volumes create powerflow_data --size 1 --region ams
+[mounts]
+  source = "powerflow_data"
+  destination = "/data"
 
 # ─── Machine size ────────────────────────────────────────────────
 # 1 GB is comfortable for case300 (largest bundled IEEE case). Bump
