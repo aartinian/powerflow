@@ -45,14 +45,15 @@ primary_region = "ams"                    # Amsterdam — closest to user
     hard_limit = 200
     soft_limit = 100
 
-  # Liveness probe — a GET / returns the empty-state page (HTML 200)
-  # so it's a good cheap health signal.
+  # Liveness probe — dedicated /healthz endpoint that bypasses auth, so
+  # the check stays green when PF_PASSWORD is set (a GET / would 302 to
+  # /pf-login and fail the 2xx requirement).
   [[http_service.checks]]
     grace_period = "15s"
     interval = "30s"
     method = "GET"
     timeout = "5s"
-    path = "/"
+    path = "/healthz"
 
 # ─── Machine size ────────────────────────────────────────────────
 # 1 GB is comfortable for case300 (largest bundled IEEE case). Bump

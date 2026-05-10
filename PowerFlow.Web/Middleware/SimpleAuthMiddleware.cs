@@ -43,6 +43,14 @@ public sealed class SimpleAuthMiddleware
 
         var path = ctx.Request.Path.Value ?? "";
 
+        // Liveness probe must stay reachable so Fly's health check passes
+        // even before the user authenticates. Match Program.cs's MapGet.
+        if (path.Equals("/healthz", StringComparison.OrdinalIgnoreCase))
+        {
+            await _next(ctx);
+            return;
+        }
+
         if (path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase))
         {
             await HandleLogin(ctx);
