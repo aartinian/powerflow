@@ -31,11 +31,23 @@ COPY PowerFlow.Web/   PowerFlow.Web/
 
 # Publish for production. UseAppHost=false skips the platform-specific
 # launcher executable since we run via `dotnet PowerFlow.Web.dll` instead.
+#
+# NOTE: do NOT add --no-restore here. Blazor's static-web-asset targets
+# (the ones that copy _framework/blazor.web.js into the publish output)
+# require publish to run its own restore phase to wire up MSBuild item
+# groups correctly. --no-restore skips that wiring and the _framework/
+# directory is silently omitted, making the deployed app load a blank
+# page (blazor.web.js 404 → no Blazor circuit → no interactivity).
+# The earlier `dotnet restore` layer already populated the NuGet global
+# cache, so this restore is a fast cache-hit, not a network download.
 RUN dotnet publish PowerFlow.Web/PowerFlow.Web.csproj \
     --configuration Release \
     --output /app/publish \
-    --no-restore \
-    /p:UseAppHost=false
+    /p:UseAppHost=false && \
+    # Guard: fail loudly if the framework JS is still missing rather than
+    # silently shipping a broken image.
+    test -f /app/publish/wwwroot/_framework/blazor.web.js || \
+        { echo "ERROR: blazor.web.js missing from publish output"; exit 1; }
 
 # ─── Runtime stage ─────────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
