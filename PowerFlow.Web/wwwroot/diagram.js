@@ -52,20 +52,49 @@ export function render(container, buses, branches, dotNetRef, mode) {
         }
     }));
 
-    const layout = n <= 100
-        ? { name: 'cose', animate: false, randomize: true, nodeRepulsion: 4096, idealEdgeLength: 50, numIter: 500 }
-        : { name: 'random', animate: false };
+    // Layout: tuned by graph size. `random` is never useful — it produces a
+    // hairball with no structure. We always run cose, but with progressively
+    // cheaper parameters as n grows. Above ~600, cose is too slow to be
+    // pleasant on first paint, so fall back to a concentric layout that at
+    // least groups slack/PV/PQ buses into rings.
+    const layout =
+        n <= 100  ? { name: 'cose', animate: false, randomize: true, nodeRepulsion: 4096, idealEdgeLength: 50,  numIter: 500 } :
+        n <= 300  ? { name: 'cose', animate: false, randomize: true, nodeRepulsion: 8192, idealEdgeLength: 40,  numIter: 250, gravity: 0.6 } :
+        n <= 600  ? { name: 'cose', animate: false, randomize: true, nodeRepulsion: 12000, idealEdgeLength: 30, numIter: 120, gravity: 0.8 } :
+                    { name: 'concentric', animate: false, padding: 30, spacingFactor: 0.7,
+                      concentric: ele => ele.data('busType') === 3 ? 3 : ele.data('busType') === 2 ? 2 : 1,
+                      levelWidth: () => 1 };
+
+    // Visual scale tiers. Dense graphs need smaller nodes, thinner edges,
+    // lower opacity so the structure isn't drowned in ink.
+    const nodeSize = n > 500 ? 5 : n > 300 ? 7 : n > 100 ? 10 : n > 50 ? 14 : 18;
+    const edgeWidth = n > 500 ? 0.6 : n > 300 ? 0.9 : n > 100 ? 1.1 : 1.5;
+    const edgeOpacity = n > 500 ? 0.25 : n > 200 ? 0.4 : n > 100 ? 0.55 : 0.7;
+    // `haystack` skips control-point math entirely — much cheaper than bezier
+    // for large straight-line edge sets. Lose curved aesthetics; gain frame rate.
+    const curveStyle = n > 200 ? 'haystack' : 'bezier';
 
     cy = cytoscape({
         container,
         elements: { nodes, edges },
         layout,
+        // Performance hints kick in tiered. Below ~200 buses everything stays
+        // crisp; above that we trade visual fidelity (during pan/zoom only)
+        // for smooth interaction.
+        textureOnViewport:   n > 200,
+        hideEdgesOnViewport: n > 400,
+        hideLabelsOnViewport: n > 100,
+        pixelRatio: n > 400 ? 1 : 'auto',
+        motionBlur: false,
+        wheelSensitivity: 0.2,
+        minZoom: 0.05,
+        maxZoom: 4,
         style: [
             {
                 selector: 'node',
                 style: {
-                    width: n > 100 ? 10 : n > 50 ? 14 : 18,
-                    height: n > 100 ? 10 : n > 50 ? 14 : 18,
+                    width: nodeSize,
+                    height: nodeSize,
                     'background-color': ele => isDc ? dcColor(ele.data('vmTone')) : vmColor(ele.data('vm')),
                     label: n <= 57 ? 'data(label)' : '',
                     'font-size': 8,
@@ -81,7 +110,7 @@ export function render(container, buses, branches, dotNetRef, mode) {
             {
                 selector: 'node:selected',
                 style: {
-                    'border-width': 3,
+                    'border-width': n > 300 ? 2 : 3,
                     'border-color': '#2563eb',
                     'border-opacity': 1
                 }
@@ -89,16 +118,16 @@ export function render(container, buses, branches, dotNetRef, mode) {
             {
                 selector: 'edge',
                 style: {
-                    width: 1.5,
+                    width: edgeWidth,
                     'line-color': ele => loadingColor(ele.data('loadingPct')),
-                    'curve-style': 'bezier',
-                    opacity: 0.7
+                    'curve-style': curveStyle,
+                    opacity: edgeOpacity
                 }
             },
             {
                 selector: 'edge:selected',
                 style: {
-                    width: 3.5,
+                    width: Math.max(edgeWidth * 2.3, 2.5),
                     opacity: 1,
                     'line-color': '#2563eb'
                 }

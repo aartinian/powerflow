@@ -1,4 +1,5 @@
 using PowerFlow.Web.Components;
+using PowerFlow.Web.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,12 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+// Single-shared-password gate. No-op unless PF_PASSWORD is set, so dev
+// runs without auth. Sits ahead of static assets so even framework JS
+// stays gated until the user authenticates.
+app.UseMiddleware<SimpleAuthMiddleware>();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
