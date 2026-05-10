@@ -25,21 +25,24 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownProxies.Clear();
 });
 
-// Persist Data Protection keys to a stable on-disk location. Without this,
-// every container restart generates a fresh key ring — which means every
-// browser's antiforgery cookie from the previous run can no longer be
-// decrypted, surfacing as repeated `AntiforgeryValidationException: The
-// key {…} was not found in the key ring` errors and a broken Blazor
-// circuit on first interaction after a deploy / auto-stop. /data is the
-// Fly volume mount (see fly.toml [mounts]); locally the directory is
-// created on demand under the project content root so dev still works.
-var keysDir = Directory.Exists("/data")
-    ? "/data/keys"
-    : Path.Combine(builder.Environment.ContentRootPath, ".keys");
-Directory.CreateDirectory(keysDir);
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
-    .SetApplicationName("PowerFlow.Web");
+// Persist Data Protection keys in production so the antiforgery / cookie
+// encryption key ring survives container restarts and Fly auto-stop/start
+// cycles. Without this every restart invalidates all browser cookies and
+// logs "key {…} not found in the key ring" on every page load.
+//
+// In Development we deliberately skip this: keys are ephemeral per-run,
+// which is fine because you restart constantly anyway — and persisting
+// them locally just produces stale-cookie warnings every time you restart.
+if (!builder.Environment.IsDevelopment())
+{
+    var keysDir = Directory.Exists("/data")
+        ? "/data/keys"
+        : Path.Combine(builder.Environment.ContentRootPath, ".keys");
+    Directory.CreateDirectory(keysDir);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
+        .SetApplicationName("PowerFlow.Web");
+}
 
 var app = builder.Build();
 

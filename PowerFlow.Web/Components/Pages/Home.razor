@@ -1343,10 +1343,18 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_diagramModule is not null)
-            await _diagramModule.DisposeAsync();
-        if (_splitterModule is not null)
-            await _splitterModule.DisposeAsync();
+        // JSDisconnectedException is thrown when the browser tab is closed and
+        // the SignalR circuit drops before DisposeAsync completes. The JS-side
+        // module references are already gone at that point, so there's nothing
+        // to clean up — swallow it to avoid the noisy unhandled-exception log.
+        try
+        {
+            if (_diagramModule is not null)
+                await _diagramModule.DisposeAsync();
+            if (_splitterModule is not null)
+                await _splitterModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { /* circuit already gone — nothing to do */ }
         _dotNetRef?.Dispose();
     }
 
