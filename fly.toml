@@ -1,78 +1,44 @@
-# fly.toml ─ Fly.io application config for PowerFlow.Web.
+# fly.toml app configuration file generated for powerflow on 2026-05-10T11:36:09Z
 #
-# After editing `app` to your preferred name, deploy with:
-#   flyctl auth login
-#   flyctl apps create powerflow      # only needed once
-#   flyctl deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# `flyctl launch` will accept this file directly; no further prompts.
 
-app = "powerflow"
-primary_region = "ams"                    # Amsterdam — closest to user
+app = 'powerflow'
+primary_region = 'ams'
 
-# ─── Build ───────────────────────────────────────────────────────
-# Use the local Dockerfile rather than Fly's auto-detection.
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
-# ─── Runtime env ─────────────────────────────────────────────────
 [env]
-  ASPNETCORE_ENVIRONMENT = "Production"
-  ASPNETCORE_URLS = "http://+:8080"
-  # Prevent ASP.NET from chatting about HTTPS redirects when running
-  # behind Fly's TLS-terminating edge proxy.
-  ASPNETCORE_HTTPS_REDIRECTION = "false"
+  ASPNETCORE_ENVIRONMENT = 'Production'
+  ASPNETCORE_HTTPS_REDIRECTION = 'false'
+  ASPNETCORE_URLS = 'http://+:8080'
 
-# ─── HTTP service ────────────────────────────────────────────────
-# Blazor Server uses WebSockets for SignalR; Fly's http_service
-# handles ws/wss transparently over the same port.
+[[mounts]]
+  source = 'powerflow_data'
+  destination = '/data'
+
 [http_service]
   internal_port = 8080
-  force_https = true                      # Fly terminates TLS at the edge
-
-  # Keep one machine warm. With min_machines_running = 0 the machine
-  # stops on idle, and Blazor Server's circuit (a SignalR WebSocket)
-  # gets killed mid-session — clicks then silently no-op until the
-  # browser reconnects. Costs a few cents a day to avoid that class
-  # of bug entirely.
-  auto_stop_machines = "stop"
+  force_https = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 1
 
-  # Blazor Server holds a SignalR connection per browser tab.
-  # 200 hard / 100 soft is generous for a personal demo.
   [http_service.concurrency]
-    type = "connections"
+    type = 'connections'
     hard_limit = 200
     soft_limit = 100
 
-  # Liveness probe — dedicated /healthz endpoint that bypasses auth, so
-  # the check stays green when PF_PASSWORD is set (a GET / would 302 to
-  # /pf-login and fail the 2xx requirement).
   [[http_service.checks]]
-    grace_period = "15s"
-    interval = "30s"
-    method = "GET"
-    timeout = "5s"
-    path = "/healthz"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '15s'
+    method = 'GET'
+    path = '/healthz'
 
-# ─── Persistent storage ──────────────────────────────────────────
-# Holds ASP.NET Data Protection keys so the antiforgery / cookie
-# encryption keys survive container restarts and deploys. Without
-# this, every restart invalidates all in-flight Blazor circuits and
-# logs a stream of "key not found in key ring" exceptions.
-#
-# Create the volume once before the first deploy:
-#   fly volumes create powerflow_data --size 1 --region ams
-[mounts]
-  source = "powerflow_data"
-  destination = "/data"
-
-# ─── Machine size ────────────────────────────────────────────────
-# 1 GB is comfortable for case300 (largest bundled IEEE case). Bump
-# if you load a much bigger network. Shared-CPU is plenty for a
-# single-user demo.
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
