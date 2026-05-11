@@ -6,7 +6,10 @@ let _selectedEdgeIdx = null;
 // External callers (e.g. the split-pane divider) can dispatch this event to
 // force Cytoscape to recompute its viewport — Cytoscape doesn't watch the
 // container element's size automatically.
-window.addEventListener('pf-resize', () => { if (cy) cy.resize(); });
+//
+// Stored as a named function so destroy() can unregister it.
+function _onResize() { if (cy) cy.resize(); }
+window.addEventListener('pf-resize', _onResize);
 
 function isDarkMode() {
     const attr = document.documentElement.getAttribute('data-theme');
@@ -65,14 +68,17 @@ export function render(container, buses, branches, dotNetRef, mode) {
                       concentric: ele => ele.data('busType') === 3 ? 3 : ele.data('busType') === 2 ? 2 : 1,
                       levelWidth: () => 1 };
 
-    // Visual scale tiers. Dense graphs need smaller nodes, thinner edges,
-    // lower opacity so the structure isn't drowned in ink.
-    const nodeSize = n > 500 ? 5 : n > 300 ? 7 : n > 100 ? 10 : n > 50 ? 14 : 18;
-    const edgeWidth = n > 500 ? 0.6 : n > 300 ? 0.9 : n > 100 ? 1.1 : 1.5;
-    const edgeOpacity = n > 500 ? 0.25 : n > 200 ? 0.4 : n > 100 ? 0.55 : 0.7;
-    // `haystack` skips control-point math entirely — much cheaper than bezier
-    // for large straight-line edge sets. Lose curved aesthetics; gain frame rate.
-    const curveStyle = n > 200 ? 'haystack' : 'bezier';
+    // Visual scale tiers keyed by graph size — all four variables in one place
+    // so threshold alignment is explicit. Note edgeOpacity and curveStyle use a
+    // 200-node break while the others don't; that's intentional (haystack/opacity
+    // kicks in earlier because it's the cheapest win at medium density).
+    const { nodeSize, edgeWidth, edgeOpacity, curveStyle } =
+        n > 500 ? { nodeSize: 5,  edgeWidth: 0.6, edgeOpacity: 0.25, curveStyle: 'haystack' } :
+        n > 300 ? { nodeSize: 7,  edgeWidth: 0.9, edgeOpacity: 0.4,  curveStyle: 'haystack' } :
+        n > 200 ? { nodeSize: 10, edgeWidth: 1.1, edgeOpacity: 0.4,  curveStyle: 'haystack' } :
+        n > 100 ? { nodeSize: 10, edgeWidth: 1.1, edgeOpacity: 0.55, curveStyle: 'bezier'   } :
+        n > 50  ? { nodeSize: 14, edgeWidth: 1.5, edgeOpacity: 0.7,  curveStyle: 'bezier'   } :
+                  { nodeSize: 18, edgeWidth: 1.5, edgeOpacity: 0.7,  curveStyle: 'bezier'   };
 
     cy = cytoscape({
         container,
@@ -135,7 +141,6 @@ export function render(container, buses, branches, dotNetRef, mode) {
         ]
     });
 
-    // Node tap
     cy.on('tap', 'node', (evt) => {
         const node = evt.target;
         const id = parseInt(node.id());
@@ -152,10 +157,9 @@ export function render(container, buses, branches, dotNetRef, mode) {
         }
     });
 
-    // Edge tap
     cy.on('tap', 'edge', (evt) => {
         const edge = evt.target;
-        const idx = parseInt(edge.id().substring(1)); // 'e3' → 3
+        const idx = parseInt(edge.id().substring(1));
         _selectedId = null;
         if (idx === _selectedEdgeIdx) {
             _selectedEdgeIdx = null;
@@ -169,7 +173,6 @@ export function render(container, buses, branches, dotNetRef, mode) {
         }
     });
 
-    // Background tap
     cy.on('tap', (evt) => {
         if (evt.target === cy) {
             _selectedId = null;
@@ -194,6 +197,7 @@ export function unselectAll() {
 
 export function destroy() {
     if (cy) { cy.destroy(); cy = null; }
+    window.removeEventListener('pf-resize', _onResize);
     _dotNetRef = null;
     _selectedId = null;
     _selectedEdgeIdx = null;

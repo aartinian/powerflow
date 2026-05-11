@@ -15,20 +15,25 @@ public sealed class SimpleAuthMiddleware
     private const string CookieName = "pf_auth";
     private const string LoginPath  = "/pf-login";
 
-    private readonly RequestDelegate _next;
-    private readonly string _password;
-    private readonly string _cookieValue;
+    private readonly RequestDelegate         _next;
+    private readonly string                  _password;
+    private readonly string                  _cookieValue;
+    private readonly ReadOnlyMemory<byte>    _loginPage;
+    private readonly ReadOnlyMemory<byte>    _loginPageError;
 
     public SimpleAuthMiddleware(RequestDelegate next, IConfiguration config)
     {
-        _next = next;
-        _password = config["PF_PASSWORD"]
-                    ?? Environment.GetEnvironmentVariable("PF_PASSWORD")
-                    ?? "";
+        _next     = next;
+        _password = config["PF_PASSWORD"] ?? "";
+
         // Cookie value is a hash of the password so it survives app restarts
         // (no in-memory session store needed) and rotates automatically when
         // the password changes — all old cookies become invalid.
         _cookieValue = string.IsNullOrEmpty(_password) ? "" : Hash(_password);
+
+        // Pre-encode both page variants once — the HTML is static.
+        _loginPage      = Encoding.UTF8.GetBytes(BuildLoginPage(null));
+        _loginPageError = Encoding.UTF8.GetBytes(BuildLoginPage("Wrong password."));
     }
 
     public async Task InvokeAsync(HttpContext ctx)
@@ -57,6 +62,8 @@ public sealed class SimpleAuthMiddleware
             return;
         }
 
+        // Cookie value is a SHA-256 hash, so plain equality is fine here —
+        // a timing side-channel on the hash leaks nothing about the password.
         if (ctx.Request.Cookies.TryGetValue(CookieName, out var v) && v == _cookieValue)
         {
             await _next(ctx);
@@ -92,23 +99,26 @@ public sealed class SimpleAuthMiddleware
                 return;
             }
 
-            await WriteLoginPage(ctx, "Wrong password.");
+            await WriteLoginPage(ctx, error: true);
             return;
         }
 
-        await WriteLoginPage(ctx, null);
+        await WriteLoginPage(ctx, error: false);
     }
 
-    private static async Task WriteLoginPage(HttpContext ctx, string? error)
+    private async Task WriteLoginPage(HttpContext ctx, bool error)
     {
         ctx.Response.ContentType = "text/html; charset=utf-8";
-        ctx.Response.StatusCode  = error == null ? 200 : 401;
+        await ctx.Response.Body.WriteAsync(error ? _loginPageError : _loginPage);
+    }
 
+    private static string BuildLoginPage(string? error)
+    {
         var errBlock = error == null
             ? ""
             : $"<p class=\"err\">{System.Net.WebUtility.HtmlEncode(error)}</p>";
 
-        var html = $$"""
+        return $$"""
         <!doctype html>
         <html lang="en">
         <head>
@@ -191,8 +201,6 @@ public sealed class SimpleAuthMiddleware
         </body>
         </html>
         """;
-
-        await ctx.Response.WriteAsync(html);
     }
 
     private static string Hash(string s)
