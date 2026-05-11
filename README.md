@@ -91,6 +91,13 @@ dotnet run --project PowerFlow.Runner
 
 ## Runner
 
+**Web UI**
+```bash
+dotnet run --project PowerFlow.Web
+```
+Open `http://localhost:5032`, upload any MATPOWER `.m` file, and click Solve.
+
+**Console**
 ```bash
 # Bundled IEEE 14-bus demo
 dotnet run --project PowerFlow.Runner

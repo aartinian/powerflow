@@ -1,0 +1,250 @@
+.pf-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;    /* exact viewport — topbar and footer are always in frame */
+    overflow: hidden;  /* prevent the shell itself from scrolling */
+}
+
+/* ── Top bar ───────────────────────────────────────────── */
+
+.pf-topbar {
+    background: var(--pf-topbar-gradient, var(--pf-topbar));
+    border-bottom: 1px solid var(--pf-topbar-border);
+    height: 60px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0 1.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    /* Subtle inner highlight on the top edge — gives the bar a real surface feel */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04),
+                0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* ── Brand ─────────────────────────────────────────────── */
+
+.pf-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: var(--pf-topbar-text);
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: opacity 0.12s;
+}
+.pf-brand:hover { color: var(--pf-topbar-text); text-decoration: none; opacity: 0.9; }
+
+.pf-brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.06));
+    color: #93c5fd;
+    /* The accent glow sells the "this is the brand" feel without being loud */
+    box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.18),
+                0 0 18px -4px rgba(59, 130, 246, 0.35);
+}
+
+.pf-brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.05;
+    gap: 1px;
+}
+.pf-brand-name {
+    font-weight: 700;
+    font-size: 1.02rem;
+    letter-spacing: -0.018em;
+    color: var(--pf-topbar-text);
+}
+.pf-brand-tag {
+    font-size: 0.69rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--pf-topbar-text-2);
+}
+
+/* ── Top-bar end (right side controls) ─────────────────── */
+
+.pf-topbar-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.pf-topbar-version {
+    font-family: var(--pf-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: var(--pf-topbar-text-2);
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    background: var(--pf-topbar-surface);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+}
+
+.pf-topbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--pf-topbar-text-2);
+    text-decoration: none;
+    padding: 0.34rem 0.65rem 0.34rem 0.55rem;
+    border-radius: 7px;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.pf-topbar-link:hover {
+    background: var(--pf-topbar-surface);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: var(--pf-topbar-text);
+    text-decoration: none;
+}
+.pf-topbar-link svg { flex-shrink: 0; }
+
+.pf-theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--pf-topbar-surface);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 7px;
+    color: var(--pf-topbar-text-2);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    padding: 0;
+    flex-shrink: 0;
+}
+.pf-theme-toggle:hover {
+    background: var(--pf-topbar-surface-2);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--pf-topbar-text);
+}
+
+/* ── Main ──────────────────────────────────────────────── */
+
+.pf-main {
+    flex: 1;
+    min-height: 0;         /* lets flex shrink the main area below its content height */
+    overflow-y: auto;      /* content scrolls here; topbar and footer stay in frame   */
+    background: var(--pf-bg);
+    transition: background 0.2s;
+}
+
+.pf-content {
+    /* Fluid up to the viewport — the data-dense canvas earns the extra width.   */
+    /* `min(1920px, 100%)` caps it on very wide ultrawides (4K+, 27"+) where     */
+    /* edge-to-edge would feel sparse, while still using all the room on a       */
+    /* typical 1920p / 2560p monitor.                                            */
+    max-width: min(1920px, 100%);
+    margin: 0 auto;
+    padding: 1.75rem 2rem 2rem;
+}
+
+/* ── Footer ────────────────────────────────────────────── */
+
+.pf-footer {
+    background: var(--pf-bg);
+    border-top: 1px solid var(--pf-border);
+    transition: background 0.2s, border-color 0.2s;
+}
+.pf-footer-inner {
+    /* Match .pf-content so footer attribution lines up with the page edges */
+    max-width: min(1920px, 100%);
+    margin: 0 auto;
+    padding: 1.4rem 2rem 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pf-footer-attr {
+    font-size: 0.82rem;
+    color: var(--pf-text-3);
+}
+.pf-footer-attr strong {
+    font-weight: 600;
+    color: var(--pf-text-2);
+}
+.pf-footer-attr a {
+    color: var(--pf-text-3);
+    text-decoration: none;
+    font-family: var(--pf-mono);
+    font-size: 0.78rem;
+    border-bottom: 1px dashed transparent;
+    transition: color 0.12s, border-color 0.12s;
+}
+.pf-footer-attr a:hover {
+    color: var(--pf-accent);
+    border-bottom-color: var(--pf-accent);
+}
+.pf-footer-sep {
+    margin: 0 0.5rem;
+    color: var(--pf-text-4);
+    user-select: none;
+}
+
+.pf-footer-stack {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+.pf-footer-chip {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    color: var(--pf-text-3);
+    background: var(--pf-surface);
+    border: 1px solid var(--pf-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+@media (max-width: 720px) {
+    .pf-topbar { padding: 0 1rem; gap: 0.75rem; }
+    .pf-brand-tag { display: none; }
+    .pf-topbar-link span { display: none; }
+    .pf-topbar-version { display: none; }
+    .pf-footer-inner { padding: 1.1rem 1rem 1.3rem; }
+}
+
+/* ── Error UI ──────────────────────────────────────────── */
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0,0,0,0.2);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
