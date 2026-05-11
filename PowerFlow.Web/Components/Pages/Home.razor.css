@@ -1141,6 +1141,17 @@
     .pf-metric:nth-child(n+3) { border-top: 1px solid var(--pf-border); }
 }
 
+/* ─── Export button in the tabs strip ──────────────────────────────── */
+/* Sits at the right end of the tab bar via ms-auto (margin-left:auto). */
+/* Inherits pf-icon-btn shape; this modifier handles tab-bar positioning. */
+
+.pf-tab-action {
+    margin-left: auto;
+    align-self: center;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
 /* ─── Warn-tinted tab (Violations) ─────────────────────────────────── */
 /* Same shape as a regular .pf-tab but with warning-coloured count badge   */
 /* and active state — communicates "these are issues" without shouting.   */

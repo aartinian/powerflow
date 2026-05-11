@@ -692,6 +692,19 @@
                             Log <span class="pf-tab-count">@logLines.Count</span>
                         </button>
                     }
+                    @if (CanExportTab)
+                    {
+                        <button class="pf-icon-btn pf-tab-action" @onclick="ExportCurrentTab"
+                                title="Download @tab as CSV">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            <span>CSV</span>
+                        </button>
+                    }
                 </div>
 
                 <div class="pf-tbl-wrap">
@@ -1339,6 +1352,136 @@
         _branchPopover = null;
         if (_diagramModule is not null)
             try { await _diagramModule.InvokeVoidAsync("unselectAll"); } catch { }
+    }
+
+    // ── CSV export ──────────────────────────────────────────────────────────
+
+    bool CanExportTab => tab is "buses" or "branches" or "generators";
+
+    string CaseStem() => fileName is null
+        ? "result"
+        : Path.GetFileNameWithoutExtension(fileName);
+
+    async Task ExportCurrentTab()
+    {
+        if (network is null) return;
+        var stem = CaseStem();
+        var (csv, filename) = (result, dcResult, tab) switch
+        {
+            ({ } r, _, "buses")      => (BuildAcBusesCsv(r),     stem + "_buses.csv"),
+            ({ } r, _, "branches")   => (BuildAcBranchesCsv(r),  stem + "_branches.csv"),
+            ({ } r, _, "generators") => (BuildGeneratorsCsv(r),  stem + "_generators.csv"),
+            (_, { } dc, "buses")     => (BuildDcBusesCsv(dc),    stem + "_dc_buses.csv"),
+            (_, { } dc, "branches")  => (BuildDcBranchesCsv(dc), stem + "_dc_branches.csv"),
+            _                        => ((string?)null, (string?)null)
+        };
+        if (csv is not null && filename is not null)
+            await JS.InvokeVoidAsync("pfDownloadCsv", csv, filename);
+    }
+
+    string BuildAcBusesCsv(PowerFlowResult r)
+    {
+        var sb = new System.Text.StringBuilder(
+            "Bus,Vm (pu),Va (deg),Pg (MW),Qg (MVAr),Pd (MW),Qd (MVAr)\n");
+        var mva = network!.BaseMva;
+        for (int i = 0; i < network.Buses.Count; i++)
+        {
+            var bus = network.Buses[i];
+            sb.AppendLine(string.Join(",",
+                bus.Id,
+                r.Vm[i].ToString("F6", CultureInfo.InvariantCulture),
+                r.Va[i].ToString("F4", CultureInfo.InvariantCulture),
+                (r.Pg[i] * mva).ToString("F4", CultureInfo.InvariantCulture),
+                (r.Qg[i] * mva).ToString("F4", CultureInfo.InvariantCulture),
+                bus.Pd.ToString("F4", CultureInfo.InvariantCulture),
+                bus.Qd.ToString("F4", CultureInfo.InvariantCulture)));
+        }
+        return sb.ToString();
+    }
+
+    string BuildAcBranchesCsv(PowerFlowResult r)
+    {
+        var sb = new System.Text.StringBuilder(
+            "From,To,P_ij (MW),Q_ij (MVAr),P_ji (MW),Q_ji (MVAr),Loss (MW),Loading (%)\n");
+        var mva = network!.BaseMva;
+        foreach (var bf in r.BranchFlows)
+        {
+            var loss = (bf.Pij + bf.Pji) * mva;
+            var loading = double.IsNaN(bf.LoadingPct)
+                ? ""
+                : bf.LoadingPct.ToString("F2", CultureInfo.InvariantCulture);
+            sb.AppendLine(string.Join(",",
+                bf.FromBusId,
+                bf.ToBusId,
+                (bf.Pij * mva).ToString("F4", CultureInfo.InvariantCulture),
+                (bf.Qij * mva).ToString("F4", CultureInfo.InvariantCulture),
+                (bf.Pji * mva).ToString("F4", CultureInfo.InvariantCulture),
+                (bf.Qji * mva).ToString("F4", CultureInfo.InvariantCulture),
+                loss.ToString("F4", CultureInfo.InvariantCulture),
+                loading));
+        }
+        return sb.ToString();
+    }
+
+    string BuildGeneratorsCsv(PowerFlowResult r)
+    {
+        var sb = new System.Text.StringBuilder(
+            "Bus,Vg (pu),Pg (MW),Pg_min (MW),Pg_max (MW),Qg (MVAr),Qg_min (MVAr),Qg_max (MVAr),Q-limit,Status\n");
+        var mva = network!.BaseMva;
+        var inSvcResults = r.Generators;
+        int gri = 0;
+        foreach (var gen in network.Generators)
+        {
+            var busIdx = network.IndexOf(gen.BusId);
+            GeneratorResult? gr = null;
+            if (gen.IsInService && gri < inSvcResults.Count) gr = inSvcResults[gri++];
+            var qLimit = gr is { IsAtQmax: true } ? "Qmax"
+                       : gr is { IsAtQmin: true } ? "Qmin"
+                       : "";
+            sb.AppendLine(string.Join(",",
+                gen.BusId,
+                gen.Vg.ToString("F6", CultureInfo.InvariantCulture),
+                (gr is null ? gen.Pg : gr.Pg).ToString("F4", CultureInfo.InvariantCulture),
+                gen.Pmin.ToString("F4", CultureInfo.InvariantCulture),
+                gen.Pmax.ToString("F4", CultureInfo.InvariantCulture),
+                (r.Qg[busIdx] * mva).ToString("F4", CultureInfo.InvariantCulture),
+                gen.Qmin.ToString("F4", CultureInfo.InvariantCulture),
+                gen.Qmax.ToString("F4", CultureInfo.InvariantCulture),
+                qLimit,
+                gen.IsInService ? "On" : "Off"));
+        }
+        return sb.ToString();
+    }
+
+    string BuildDcBusesCsv(DcPowerFlowResult dc)
+    {
+        var sb = new System.Text.StringBuilder("Bus,Type,Va (deg),Pg (MW),Pd (MW)\n");
+        var mva = network!.BaseMva;
+        for (int i = 0; i < network.Buses.Count; i++)
+        {
+            var bus = network.Buses[i];
+            sb.AppendLine(string.Join(",",
+                bus.Id,
+                bus.Type,
+                dc.Va[i].ToString("F4", CultureInfo.InvariantCulture),
+                (dc.Pg[i] * mva).ToString("F4", CultureInfo.InvariantCulture),
+                bus.Pd.ToString("F4", CultureInfo.InvariantCulture)));
+        }
+        return sb.ToString();
+    }
+
+    string BuildDcBranchesCsv(DcPowerFlowResult dc)
+    {
+        var sb = new System.Text.StringBuilder("From,To,P (MW)\n");
+        var mva = network!.BaseMva;
+        foreach (var bf in dc.BranchFlows)
+        {
+            sb.AppendLine(string.Join(",",
+                bf.FromBus,
+                bf.ToBus,
+                (bf.P * mva).ToString("F4", CultureInfo.InvariantCulture)));
+        }
+        return sb.ToString();
     }
 
     public async ValueTask DisposeAsync()

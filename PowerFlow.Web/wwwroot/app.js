@@ -14,3 +14,12 @@ window.pfToggleTheme = function () {
     root.setAttribute('data-theme', next);
     localStorage.setItem('pf-theme', next);
 };
+
+window.pfDownloadCsv = function (content, filename) {
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+};
