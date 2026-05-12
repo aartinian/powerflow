@@ -17,12 +17,12 @@ namespace PowerFlow.Core.Solver;
 /// as b = 1 / (a · X).
 /// </para>
 /// </summary>
-public class DcPowerFlowSolver
+public sealed class DcPowerFlowSolver
 {
     /// <summary>
     /// Solve the DC power flow for <paramref name="network"/>. The network
     /// must contain exactly one slack bus. Validate first with
-    /// <see cref="NetworkValidator"/> to surface structural issues before
+    /// <see cref="Validation.NetworkValidator"/> to surface structural issues before
     /// calling.
     /// </summary>
     public DcPowerFlowResult Solve(PowerNetwork network)
@@ -62,7 +62,7 @@ public class DcPowerFlowSolver
             if (Math.Abs(br.X) < 1e-10)
                 continue; // zero-reactance branch → skip
 
-            double tap = br.TapRatio > 0 ? br.TapRatio : 1.0;
+            double tap = br.TapRatio; // always ≥ 1.0: Branch constructor normalises 0 → 1.0
             double b = 1.0 / (tap * br.X);
             double phi = br.PhaseShift * Math.PI / 180.0; // radians
 
@@ -102,7 +102,20 @@ public class DcPowerFlowSolver
         {
             var Bred = CompressedColumnStorage<double>.OfIndexed(bTrips, true);
             var thetaRed = new double[m];
-            SparseLU.Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(rhs, thetaRed);
+            try
+            {
+                SparseLU
+                    .Create(Bred, ColumnOrdering.MinimumDegreeAtPlusA, 1.0)
+                    .Solve(rhs, thetaRed);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                throw new InvalidOperationException(
+                    "DC power-flow solve failed: B′ matrix is singular. "
+                        + "Validate the network with NetworkValidator before solving.",
+                    ex
+                );
+            }
 
             for (int i = 0; i < n; i++)
                 if (busMap[i] >= 0)
@@ -121,7 +134,7 @@ public class DcPowerFlowSolver
             if (f < 0 || t < 0)
                 continue;
 
-            double tap = br.TapRatio > 0 ? br.TapRatio : 1.0;
+            double tap = br.TapRatio; // always ≥ 1.0: Branch constructor normalises 0 → 1.0
             double b = Math.Abs(br.X) < 1e-10 ? 0.0 : 1.0 / (tap * br.X);
             double phi = br.PhaseShift * Math.PI / 180.0;
             double P = b * (theta[f] - theta[t] - phi);

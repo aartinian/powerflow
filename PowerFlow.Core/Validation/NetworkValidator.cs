@@ -1,4 +1,6 @@
-namespace PowerFlow.Core.Models;
+using PowerFlow.Core.Models;
+
+namespace PowerFlow.Core.Validation;
 
 /// <summary>
 /// Validates a <see cref="PowerNetwork"/> before it is passed to the solver.
@@ -7,6 +9,12 @@ namespace PowerFlow.Core.Models;
 /// </summary>
 public static class NetworkValidator
 {
+    /// <summary>
+    /// Validates the structure and parameters of <paramref name="network"/>.
+    /// Returns <see cref="ValidationResult.Ok"/> when no issues are found.
+    /// Errors indicate problems that will cause the solver to fail; warnings
+    /// indicate suspicious data that may still produce a result.
+    /// </summary>
     public static ValidationResult Validate(PowerNetwork network)
     {
         var errors = new List<ValidationError>();
@@ -20,6 +28,7 @@ public static class NetworkValidator
         CheckBusVoltageLimits(network, errors);
         CheckBranchParameters(network, errors);
         CheckGeneratorPLimits(network, errors);
+        CheckMultipleVgAtBus(network, errors);
 
         return errors.Count == 0 ? ValidationResult.Ok : new ValidationResult(errors);
     }
@@ -196,8 +205,9 @@ public static class NetworkValidator
                 errors.Add(
                     new ValidationError(
                         "INVALID_TAP_RATIO",
-                        $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is not positive. "
-                            + "This will cause division by zero in the Y-bus."
+                        $"Branch {br.FromBus}→{br.ToBus}: tap ratio {br.TapRatio:F4} is negative. "
+                            + "A zero tap ratio is normalised to 1.0 by the Branch constructor; "
+                            + "a negative value is a data error and will corrupt the Y-bus."
                     )
                 );
 
@@ -241,6 +251,39 @@ public static class NetworkValidator
                         ValidationSeverity.Warning
                     )
                 );
+        }
+    }
+
+    /// <summary>
+    /// Warns when two or more in-service generators share a PV bus but declare
+    /// different voltage setpoints (Vg). The solver applies a single Vm setpoint
+    /// per bus (last-generator-wins), so one or more generators will not see their
+    /// requested terminal voltage.
+    /// </summary>
+    private static void CheckMultipleVgAtBus(PowerNetwork network, List<ValidationError> errors)
+    {
+        var pvBusIds = network.Buses.Where(b => b.Type == BusType.PV).Select(b => b.Id).ToHashSet();
+
+        var gensByBus = network
+            .Generators.Where(g => g.IsInService && pvBusIds.Contains(g.BusId))
+            .GroupBy(g => g.BusId);
+
+        foreach (var group in gensByBus)
+        {
+            var vgs = group.Select(g => g.Vg).Distinct().ToList();
+            if (vgs.Count > 1)
+            {
+                var vals = string.Join(", ", vgs.Select(v => $"{v:F4}"));
+                errors.Add(
+                    new ValidationError(
+                        "MULTIPLE_VG_AT_BUS",
+                        $"Bus {group.Key}: {group.Count()} generators with disagreeing Vg setpoints "
+                            + $"({vals} pu). The solver applies a single Vm per bus; "
+                            + "one generator's setpoint will be ignored.",
+                        ValidationSeverity.Warning
+                    )
+                );
+            }
         }
     }
 }

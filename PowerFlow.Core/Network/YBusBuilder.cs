@@ -11,6 +11,11 @@ namespace PowerFlow.Core.Network;
 /// </summary>
 public static class YBusBuilder
 {
+    /// <summary>
+    /// Constructs the sparse bus admittance matrix Y from the network.
+    /// Uses the off-nominal-tap π model for branches and includes shunt admittances.
+    /// Out-of-service branches and isolated buses are handled correctly.
+    /// </summary>
     public static SparseYbus Build(PowerNetwork network)
     {
         int n = network.Buses.Count;
@@ -50,11 +55,11 @@ public static class YBusBuilder
         }
 
         // Gs/Bs are stored in MW/MVAr; divide by baseMVA to get pu admittance.
-        foreach (var bus in network.Buses)
+        // Buses are sorted by ID so the loop index matches the solver's bus index directly.
+        for (int i = 0; i < n; i++)
         {
-            int i = network.IndexOf(bus.Id);
-            gd[i] += bus.Gs / network.BaseMva;
-            bd[i] += bus.Bs / network.BaseMva;
+            gd[i] += network.Buses[i].Gs / network.BaseMva;
+            bd[i] += network.Buses[i].Bs / network.BaseMva;
         }
 
         return new SparseYbus(n, gd, bd, rows.Select(l => l.ToArray()).ToArray());

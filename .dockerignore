@@ -1,0 +1,34 @@
+# Build output ─ never ship intermediate artifacts to the daemon
+**/bin
+**/obj
+
+# Local IDE / editor noise
+.idea
+.vs
+.vscode
+*.user
+*.suo
+*.swp
+*.swo
+.DS_Store
+
+# Git internals — Docker doesn't need history
+.git
+.gitignore
+.gitattributes
+.github
+
+# Project bits the Web app doesn't need at runtime
+PowerFlow.Tests/
+PowerFlow.Runner/
+samples/
+
+# Repo docs aren't part of the image
+README.md
+LICENSE
+*.md
+
+# Deploy artefacts (would otherwise be copied recursively into themselves)
+Dockerfile
+.dockerignore
+fly.toml

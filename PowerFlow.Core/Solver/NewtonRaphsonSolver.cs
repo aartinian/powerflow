@@ -12,13 +12,29 @@ namespace PowerFlow.Core.Solver;
 /// kernel (CSparse). Configure with init-only properties (<see cref="Tolerance"/>,
 /// <see cref="MaxIterations"/>, <see cref="EnforceLimits"/>, <see cref="FlatStart"/>,
 /// <see cref="MaxLimitIterations"/>, <see cref="Log"/>) and call
-/// <see cref="Solve"/>. The solver is stateless between calls; reuse a single
+/// <see cref="Solve(PowerNetwork)"/>. The solver is stateless between calls; reuse a single
 /// instance or create a new one freely.
 /// </summary>
-public class NewtonRaphsonSolver
+public sealed class NewtonRaphsonSolver
 {
-    public double Tolerance { get; init; } = 1e-6; // pu — matches MATPOWER default
+    /// <summary>
+    /// Convergence tolerance in pu. The solver stops when the largest absolute
+    /// power mismatch falls below this value. Default 1e-6 matches MATPOWER.
+    /// </summary>
+    public double Tolerance { get; init; } = 1e-6;
+
+    /// <summary>
+    /// Maximum number of Newton-Raphson iterations per convergence attempt.
+    /// Default 50. Increase only for difficult networks; check convergence status
+    /// before raising this to avoid masking data issues.
+    /// </summary>
     public int MaxIterations { get; init; } = 50;
+
+    /// <summary>
+    /// When <c>true</c>, enforce reactive power limits by switching PV buses to PQ
+    /// when their reactive output hits a ceiling or floor. When <c>false</c>,
+    /// generators are unconstrained (useful for checking feasibility).
+    /// </summary>
     public bool EnforceLimits { get; init; } = true;
 
     /// <summary>
@@ -49,6 +65,17 @@ public class NewtonRaphsonSolver
     public bool DistributedSlack { get; init; } = false;
 
     /// <summary>
+    /// When true, a linearised DC power flow is run before the first AC Newton-Raphson
+    /// iteration and its solved angles seed the initial Va vector. Vm comes from the
+    /// bus data or the flat-start profile as usual. Useful for cases that struggle to
+    /// converge from a cold (flat) start because the DC angles are a much better
+    /// initial guess than Va = 0° everywhere.
+    /// Incompatible with <see cref="FlatStart"/> being the sole initialisation strategy
+    /// — both options may be set simultaneously; Vm will be flat while Va comes from DC.
+    /// </summary>
+    public bool WarmStartFromDc { get; init; } = false;
+
+    /// <summary>
     /// When true, the initial voltage state is overridden to a flat profile
     /// (Vm = 1.0 pu, Va = 0°) regardless of what the bus data specifies.
     /// Generator Vg setpoints are still applied at PV and slack buses, so the
@@ -66,14 +93,39 @@ public class NewtonRaphsonSolver
     /// </summary>
     public ILogger? Log { get; init; }
 
+    /// <summary>
+    /// The sparse linear-system solver used inside each Newton-Raphson iteration.
+    /// Receives the Jacobian <c>J</c> (n×n compressed-column) and the mismatch
+    /// vector <c>f</c>; must return the correction vector <c>dx</c> such that
+    /// <c>J·dx = f</c>, or <c>null</c> when the system is singular / ill-conditioned.
+    /// A null return causes the NR loop to break with <see cref="PowerFlowResult.Converged"/>
+    /// = false, exactly like a non-convergence.
+    /// <para>
+    /// Default: CSparse sparse LU (<see cref="SparseLU"/>).
+    /// Override to plug in KLU, PARDISO, or any other factorisation backend
+    /// without recompiling the solver.
+    /// </para>
+    /// </summary>
+    public Func<CompressedColumnStorage<double>, double[], double[]?> LinearSolver { get; init; } =
+        CSparseLinearSolver;
+
     private void Info(string msg) => Log?.LogInformation("{Message}", msg);
 
     private void Warn(string msg) => Log?.LogWarning("{Message}", msg);
 
     /// <summary>
+    /// Convenience overload: builds the Y-bus from the network, then solves.
+    /// Use <see cref="Solve(PowerNetwork, SparseYbus)"/> directly when the topology is
+    /// fixed across multiple solves (sensitivity sweeps, parameter studies) to avoid
+    /// rebuilding the admittance matrix each time.
+    /// </summary>
+    public PowerFlowResult Solve(PowerNetwork network) =>
+        Solve(network, YBusBuilder.Build(network));
+
+    /// <summary>
     /// Solve the AC power flow for the given network using polar-form
     /// Newton-Raphson with sparse LU factorisation. The network must contain
-    /// exactly one slack bus; validate first with <see cref="NetworkValidator"/>
+    /// exactly one slack bus; validate first with <see cref="Validation.NetworkValidator"/>
     /// to surface other issues (missing bus references, bad tap ratios, etc.)
     /// before calling.
     /// </summary>
@@ -86,9 +138,8 @@ public class NewtonRaphsonSolver
     /// <see cref="PowerFlowResult.Converged"/> to know whether the solution
     /// is trustworthy.
     /// </remarks>
-    public PowerFlowResult Solve(PowerNetwork network)
+    public PowerFlowResult Solve(PowerNetwork network, SparseYbus ybus)
     {
-        var ybus = YBusBuilder.Build(network);
         int n = ybus.N;
 
         var (slackIdx, pvList, pqList) = ClassifyBuses(network);
@@ -96,10 +147,20 @@ public class NewtonRaphsonSolver
             throw new InvalidOperationException("Network has no slack bus.");
 
         var (Psch, Qsch) = BuildScheduledInjections(network);
-        var alpha = DistributedSlack ? BuildParticipationFactors(network) : Array.Empty<double>();
+        var (alpha, alphaCount) = DistributedSlack
+            ? BuildParticipationFactors(network)
+            : (Array.Empty<double>(), 0);
         double lambda = 0.0;
         var (Vm, Va) = BuildInitialState(network, FlatStart);
         var (qMaxMvar, qMinMvar, vgSetpoint) = BuildPvLimitsAndSetpoints(network, EnforceLimits);
+
+        if (WarmStartFromDc)
+        {
+            var dc = new DcPowerFlowSolver().Solve(network);
+            for (int i = 0; i < n; i++)
+                Va[i] = dc.Va[i] * Math.PI / 180.0; // degrees → radians
+            Info("DC warm-start: Va seeded from DC solution");
+        }
 
         // Tracks buses that were switched PV→PQ and the reason:
         //   true  = switched because Qg hit Qmax
@@ -110,7 +171,6 @@ public class NewtonRaphsonSolver
         double[] Q = new double[n];
         double mismatch = double.MaxValue;
         bool converged = false;
-        int iterations = MaxIterations;
         int totalNrIters = 0;
 
         int inServiceBranches = network.Branches.Count(b => b.IsInService);
@@ -120,7 +180,7 @@ public class NewtonRaphsonSolver
         if (EnforceLimits)
             Info($"Q-limit enforcement ON  (max {MaxLimitIterations} outer iters)");
         if (DistributedSlack)
-            Info($"Distributed slack ON  ({alpha.Count(a => a > 0)} participating bus(es))");
+            Info($"Distributed slack ON  ({alphaCount} participating bus(es))");
 
         bool limitViolated = false;
         int limitIter = 0;
@@ -132,7 +192,6 @@ public class NewtonRaphsonSolver
             Info($"single slack-bus network — trivially solved");
             (P, Q) = ComputeInjections(ybus, Vm, Va);
             converged = true;
-            iterations = 0;
             mismatch = 0.0;
         }
         else
@@ -178,7 +237,6 @@ public class NewtonRaphsonSolver
                     if (mismatch < Tolerance)
                     {
                         converged = true;
-                        iterations = iter;
                         totalNrIters += iter + 1;
                         break;
                     }
@@ -194,7 +252,16 @@ public class NewtonRaphsonSolver
                         DistributedSlack ? slackIdx : -1,
                         DistributedSlack ? alpha : null
                     );
-                    var dx = SolveLinear(J, f);
+                    var dx = LinearSolver(J, f);
+                    if (dx is null)
+                    {
+                        Warn(
+                            "Linear solve failed: Jacobian is singular. "
+                                + "Check for islanded buses or zero-impedance loops."
+                        );
+                        totalNrIters += iter + 1;
+                        break; // exits inner NR loop; converged stays false
+                    }
 
                     // Backtracking line search: find the largest μ = 2^{−k} that
                     // reduces ‖f‖∞. For well-conditioned networks μ = 1 on the first
@@ -310,7 +377,20 @@ public class NewtonRaphsonSolver
             qg[i] = Q[i] + network.Buses[i].Qd / network.BaseMva;
         }
 
-        return MakeResult(network, converged, iterations, Vm, Va, mismatch, pg, qg, lambda);
+        return MakeResult(
+            network,
+            converged,
+            totalNrIters,
+            limitIter,
+            Vm,
+            Va,
+            mismatch,
+            pg,
+            qg,
+            lambda,
+            switchedAtMax,
+            DistributedSlack ? alpha : null
+        );
     }
 
     // ── Setup helpers ─────────────────────────────────────────────────────────
@@ -431,6 +511,9 @@ public class NewtonRaphsonSolver
 
             if (enforceLimits)
             {
+                // ±∞ is the "no generator yet" sentinel used downstream by ApplyQLimitSwitches
+                // to mean "unconstrained". First gen at a bus replaces the sentinel; subsequent
+                // gens at the same bus accumulate additively (combined bus-level limit).
                 qMaxMvar[i] = double.IsPositiveInfinity(qMaxMvar[i])
                     ? gen.Qmax
                     : qMaxMvar[i] + gen.Qmax;
@@ -452,7 +535,9 @@ public class NewtonRaphsonSolver
     /// When no generator has Pmax &gt; 0 (degenerate case), α falls back to a uniform
     /// 1/n distribution so the augmented Jacobian remains non-singular.
     /// </summary>
-    private static double[] BuildParticipationFactors(PowerNetwork network)
+    private static (double[] alpha, int participantCount) BuildParticipationFactors(
+        PowerNetwork network
+    )
     {
         int n = network.Buses.Count;
         var alpha = new double[n];
@@ -465,7 +550,8 @@ public class NewtonRaphsonSolver
         else
             for (int i = 0; i < n; i++)
                 alpha[i] = 1.0 / n;
-        return alpha;
+        int participantCount = alpha.Count(a => a > 0);
+        return (alpha, participantCount);
     }
 
     // ── Q-limit enforcement ───────────────────────────────────────────────────
@@ -697,13 +783,21 @@ public class NewtonRaphsonSolver
         var triplets = new CoordinateStorage<double>(dim, dim, capacity);
 
         // Off-diagonal: iterate Ybus non-zeros, emit up to 4 Jacobian entries per (i,j) pair.
+        // Rows are independent — each bus i writes only to its own P- and Q-block rows.
+        // Parallelise over rows for large networks; use sequential path for small ones where
+        // thread-pool overhead would dominate (threshold: 100 buses ≈ case57 and above).
+        var rowEntries = new List<(int Row, int Col, double Val)>[ybus.N];
         for (int i = 0; i < ybus.N; i++)
+            rowEntries[i] = new List<(int, int, double)>(ybus.OffDiag[i].Length * 4);
+
+        void FillRow(int i)
         {
             int pr = pvpqPos[i]; // row in P-block
             int qr = pqPos[i]; // row offset in Q-block
             if (pr < 0 && qr < 0)
-                continue; // slack bus — no Jacobian rows
+                return; // slack bus — no Jacobian rows
 
+            var list = rowEntries[i];
             foreach (var (j, Gij, Bij) in ybus.OffDiag[i])
             {
                 int tc = pvpqPos[j]; // col in θ-block
@@ -721,19 +815,30 @@ public class NewtonRaphsonSolver
                 if (pr >= 0)
                 {
                     if (tc >= 0)
-                        triplets.At(pr, tc, h); // H: ∂P_i/∂θ_j
+                        list.Add((pr, tc, h)); // H: ∂P_i/∂θ_j
                     if (vc >= 0)
-                        triplets.At(pr, npvpq + vc, nv); // N: Vj·∂P_i/∂Vj
+                        list.Add((pr, npvpq + vc, nv)); // N: Vj·∂P_i/∂Vj
                 }
                 if (qr >= 0)
                 {
                     if (tc >= 0)
-                        triplets.At(npvpq + qr, tc, -nv); // M: ∂Q_i/∂θ_j
+                        list.Add((npvpq + qr, tc, -nv)); // M: ∂Q_i/∂θ_j
                     if (vc >= 0)
-                        triplets.At(npvpq + qr, npvpq + vc, h); // L: Vj·∂Q_i/∂Vj
+                        list.Add((npvpq + qr, npvpq + vc, h)); // L: Vj·∂Q_i/∂Vj
                 }
             }
         }
+
+        if (ybus.N >= 100)
+            Parallel.For(0, ybus.N, FillRow);
+        else
+            for (int i = 0; i < ybus.N; i++)
+                FillRow(i);
+
+        // Merge per-row results into the shared triplet store (sequential — O(nnz), fast).
+        foreach (var list in rowEntries)
+            foreach (var (r, c, v) in list)
+                triplets.At(r, c, v);
 
         // Diagonal entries use accumulated P[i]/Q[i] and the diagonal admittance.
         for (int k = 0; k < npvpq; k++)
@@ -793,23 +898,39 @@ public class NewtonRaphsonSolver
         return CompressedColumnStorage<double>.OfIndexed(triplets, true);
     }
 
-    private static double[] SolveLinear(CompressedColumnStorage<double> A, double[] b)
+    /// <summary>
+    /// Built-in CSparse sparse LU solver. Exposed as a public static so it can be
+    /// referenced directly (e.g. as a fallback inside a KLU adapter) or passed
+    /// explicitly: <c>new NewtonRaphsonSolver { LinearSolver = NewtonRaphsonSolver.CSparseLinearSolver }</c>.
+    /// Returns null when factorisation fails; the NR loop treats null as non-convergence.
+    /// </summary>
+    public static double[]? CSparseLinearSolver(CompressedColumnStorage<double> A, double[] b)
     {
-        var x = new double[b.Length];
-        SparseLU.Create(A, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(b, x);
-        return x;
+        try
+        {
+            var x = new double[b.Length];
+            SparseLU.Create(A, ColumnOrdering.MinimumDegreeAtPlusA, 1.0).Solve(b, x);
+            return x;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null; // singular or ill-conditioned — caller reports non-convergence
+        }
     }
 
     private static PowerFlowResult MakeResult(
         PowerNetwork network,
         bool converged,
-        int iter,
+        int totalNrIters,
+        int outerIters,
         double[] Vm,
         double[] Va,
         double mismatch,
         double[] pg,
         double[] qg,
-        double lambda = 0
+        double lambda,
+        Dictionary<int, bool>? switchedAtMax,
+        double[]? alpha
     )
     {
         var flows = BranchFlowCalculator.Compute(network, Vm, Va);
@@ -827,21 +948,140 @@ public class NewtonRaphsonSolver
                 if (bus.Type == BusType.Isolated)
                     continue;
                 if (Vm[i] < bus.Vmin || Vm[i] > bus.Vmax)
-                    violations.Add(new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax));
+                    violations.Add(
+                        new VoltageViolation(bus.Id, Vm[i], bus.Vmin, bus.Vmax, bus.BaseKv)
+                    );
             }
         }
 
+        var balance = converged ? BuildSystemBalance(network, pg, qg, Vm, flows) : null;
+        var generators = BuildGeneratorResults(network, qg, lambda, alpha, switchedAtMax);
+        var qLimitBound = BuildQLimitBound(network, switchedAtMax);
+
         return new PowerFlowResult(
             converged,
-            iter,
+            totalNrIters,
+            outerIters,
             mismatch,
             (double[])Vm.Clone(),
             vaDeg,
-            pg,
-            qg,
+            (double[])pg.Clone(),
+            (double[])qg.Clone(),
             flows,
             violations,
-            lambda
+            lambda,
+            balance,
+            generators,
+            qLimitBound
         );
+    }
+
+    // ── Result helpers ────────────────────────────────────────────────────────
+
+    private static SystemBalance BuildSystemBalance(
+        PowerNetwork network,
+        double[] pg,
+        double[] qg,
+        double[] Vm,
+        IReadOnlyList<BranchFlow> flows
+    )
+    {
+        double baseMva = network.BaseMva;
+
+        double totalPgMw = pg.Sum() * baseMva;
+        double totalPdMw = network.Buses.Sum(b => b.Pd);
+        double totalLossesMw = flows.Sum(f => (f.Pij + f.Pji) * baseMva);
+        double lossPct = totalPdMw > 0 ? totalLossesMw / totalPdMw * 100.0 : 0.0;
+
+        double totalQgMvar = qg.Sum() * baseMva;
+        double totalQdMvar = network.Buses.Sum(b => b.Qd);
+        double totalShuntMvar = 0.0;
+        for (int i = 0; i < network.Buses.Count; i++)
+            totalShuntMvar += network.Buses[i].Bs * Vm[i] * Vm[i];
+        double totalLossesMvar = flows.Sum(f => (f.Qij + f.Qji) * baseMva);
+
+        return new SystemBalance(
+            totalPgMw,
+            totalPdMw,
+            totalLossesMw,
+            lossPct,
+            totalQgMvar,
+            totalQdMvar,
+            totalShuntMvar,
+            totalLossesMvar
+        );
+    }
+
+    /// <summary>
+    /// Builds one <see cref="GeneratorResult"/> per in-service generator.
+    /// Pg includes the distributed-slack correction allocated proportionally to Pmax
+    /// (equal split when all generators at the bus have Pmax = 0).
+    /// Qg is the bus-level reactive divided equally among generators at the same bus.
+    /// </summary>
+    private static IReadOnlyList<GeneratorResult> BuildGeneratorResults(
+        PowerNetwork network,
+        double[] qg,
+        double lambda,
+        double[]? alpha,
+        Dictionary<int, bool>? switchedAtMax
+    )
+    {
+        double baseMva = network.BaseMva;
+        var results = new List<GeneratorResult>();
+
+        // Group in-service generators by bus array index.
+        var byBus = network
+            .Generators.Where(g => g.IsInService)
+            .GroupBy(g => network.IndexOf(g.BusId))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var (busIdx, gens) in byBus)
+        {
+            double qgBusMvar = qg[busIdx] * baseMva;
+            double qShare = qgBusMvar / gens.Count;
+
+            // Bus-level distributed-slack correction (0 when not using distributed slack).
+            double deltaPBus = alpha is not null ? alpha[busIdx] * lambda * baseMva : 0.0;
+
+            // Allocate correction proportionally to Pmax; fall back to equal split.
+            double pmaxSum = gens.Sum(g => g.Pmax);
+
+            bool busIsAtQmax = false;
+            bool busIsAtQmin = false;
+            if (switchedAtMax is not null && switchedAtMax.TryGetValue(busIdx, out bool atMax))
+            {
+                busIsAtQmax = atMax;
+                busIsAtQmin = !atMax;
+            }
+
+            foreach (var gen in gens)
+            {
+                double pgCorrection =
+                    pmaxSum > 0 ? deltaPBus * gen.Pmax / pmaxSum : deltaPBus / gens.Count;
+
+                results.Add(
+                    new GeneratorResult(
+                        gen.BusId,
+                        gen.Pg + pgCorrection,
+                        qShare,
+                        busIsAtQmax,
+                        busIsAtQmin
+                    )
+                );
+            }
+        }
+
+        return results;
+    }
+
+    private static IReadOnlyDictionary<int, bool> BuildQLimitBound(
+        PowerNetwork network,
+        Dictionary<int, bool>? switchedAtMax
+    )
+    {
+        if (switchedAtMax is null || switchedAtMax.Count == 0)
+            return new Dictionary<int, bool>();
+
+        return switchedAtMax.ToDictionary(kv => network.Buses[kv.Key].Id, kv => kv.Value);
     }
 }

@@ -2,17 +2,30 @@ namespace PowerFlow.Core.Solver;
 
 /// <summary>
 /// Solved complex power flow at both ends of one in-service branch.
-/// P_ij + P_ji ≥ 0 is the real power loss on the line. Subscript ij is the
-/// from-end injection into the branch; ji is the to-end injection.
+/// Subscript <c>ij</c> is the from-end injection into the branch;
+/// <c>ji</c> is the to-end injection. Real power loss on the branch is
+/// P_ij + P_ji ≥ 0.
+/// All values are in pu on the system base unless noted otherwise.
 /// </summary>
-public class BranchFlow
+public sealed class BranchFlow
 {
+    /// <summary>Bus ID of the from-end terminal.</summary>
     public int FromBusId { get; }
+
+    /// <summary>Bus ID of the to-end terminal.</summary>
     public int ToBusId { get; }
-    public double Pij { get; } // pu — real power entering branch at from-end
-    public double Qij { get; } // pu — reactive power entering branch at from-end
-    public double Pji { get; } // pu — real power entering branch at to-end
-    public double Qji { get; } // pu — reactive power entering branch at to-end
+
+    /// <summary>Real power injected into the branch at the from-end in pu.</summary>
+    public double Pij { get; }
+
+    /// <summary>Reactive power injected into the branch at the from-end in pu.</summary>
+    public double Qij { get; }
+
+    /// <summary>Real power injected into the branch at the to-end in pu.</summary>
+    public double Pji { get; }
+
+    /// <summary>Reactive power injected into the branch at the to-end in pu.</summary>
+    public double Qji { get; }
 
     /// <summary>Normal thermal rating in pu (0 = unconstrained).</summary>
     public double RateA { get; }
@@ -28,6 +41,7 @@ public class BranchFlow
                 * 100.0
             : double.NaN;
 
+    /// <summary>Initializes a new branch flow with the specified power injections at both ends and thermal rating.</summary>
     public BranchFlow(
         int fromBusId,
         int toBusId,

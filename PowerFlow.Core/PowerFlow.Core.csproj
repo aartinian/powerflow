@@ -3,6 +3,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- NuGet / release metadata -->
+    <Version>1.0.0</Version>
+    <Description>A steady-state AC/DC power flow solver in C#. Includes Newton-Raphson with sparse LU factorisation, Q-limit enforcement, distributed slack, DC warm-start, and MATPOWER `.m` case-file parsing.</Description>
+    <PackageTags>power-flow;newton-raphson;matpower;power-systems;electrical</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CSparse" Version="4.3.0" />
