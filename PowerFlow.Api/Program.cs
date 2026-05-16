@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.HttpOverrides;
 using PowerFlow.Api.Endpoints;
 
@@ -12,7 +13,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
-    o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 });
 
 var app = builder.Build();
