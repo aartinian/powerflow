@@ -9,4 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerFlow.Core\PowerFlow.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Cases\*.m" />
+  </ItemGroup>
 </Project>
