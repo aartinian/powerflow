@@ -9,6 +9,7 @@ export type DiagramSelection =
 
 export interface DiagramHandle {
   setNetwork(network: NetworkDto | null): void;
+  applyEdit(network: NetworkDto): void;
   setSolveResult(result: SolveResultDto | null): void;
   resetView(): void;
   resize(): void;
@@ -31,17 +32,19 @@ export function mountDiagram(
       group: 'nodes',
       data: { id: `b${b.id}`, label: String(b.id), busId: b.id, busType: b.type },
     }));
-    const edges: ElementDefinition[] = network.branches
-      .filter((br) => br.isInService)
-      .map((br) => ({
-        group: 'edges',
-        data: {
-          id: `e${br.index}`,
-          source: `b${br.fromBusId}`,
-          target: `b${br.toBusId}`,
-          branchIndex: br.index,
-        },
-      }));
+    // Include out-of-service branches too — they render dashed so the user
+    // can tell what was tripped, and the edge can be toggled back without
+    // rebuilding the graph and losing positions.
+    const edges: ElementDefinition[] = network.branches.map((br) => ({
+      group: 'edges',
+      data: {
+        id: `e${br.index}`,
+        source: `b${br.fromBusId}`,
+        target: `b${br.toBusId}`,
+        branchIndex: br.index,
+        oos: !br.isInService,
+      },
+    }));
     return [...nodes, ...edges];
   }
 
@@ -115,6 +118,14 @@ export function mountDiagram(
             width: Math.max(tier.edgeWidth * 2.3, 2.5),
             opacity: 1,
             'line-color': '#2563eb',
+          },
+        },
+        {
+          selector: 'edge[?oos]',
+          style: {
+            'line-style': 'dashed',
+            'line-color': '#94a3b8',
+            opacity: 0.4,
           },
         },
       ],
@@ -203,6 +214,28 @@ export function mountDiagram(
         cy.destroy();
         cy = null;
       }
+    },
+    // Patch existing nodes/edges in place. Caller guarantees the topology
+    // (bus IDs, branch indices) is unchanged from setNetwork — we only walk
+    // the existing elements and refresh their data fields. Avoids re-running
+    // the layout so the user's edit doesn't reshuffle the whole diagram.
+    applyEdit(net) {
+      currentNet = net;
+      if (!cy) {
+        render(net);
+        return;
+      }
+      const branchById = new Map(net.branches.map((b) => [b.index, b]));
+      const busById = new Map(net.buses.map((b) => [b.id, b]));
+      cy.nodes().forEach((node) => {
+        const b = busById.get(node.data('busId') as number);
+        if (b) node.data('busType', b.type);
+      });
+      cy.edges().forEach((edge) => {
+        const br = branchById.get(edge.data('branchIndex') as number);
+        if (br) edge.data('oos', !br.isInService);
+      });
+      cy.style().update();
     },
     setSolveResult(result) {
       if (!cy && currentNet) render(currentNet);

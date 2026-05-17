@@ -1,8 +1,15 @@
 import './style.css';
 import { ApiValidationError, listCases, loadCase, solve, solveStream, validate } from './api.js';
-import { network, scaleLoads, totalLoadMw } from './network.js';
-import type { NetworkDto, SolveOptionsDto, SolveResultDto } from './types.js';
+import {
+  network,
+  scaleLoads,
+  totalLoadMw,
+  updateBranch,
+  updateBus,
+} from './network.js';
+import type { BranchDto, BusDto, NetworkDto, SolveOptionsDto, SolveResultDto } from './types.js';
 import { mountDiagram } from './ui/diagram.js';
+import { mountEditor } from './ui/editor.js';
 import { mountResults } from './ui/results.js';
 import { mountSidebar } from './ui/sidebar.js';
 
@@ -16,21 +23,51 @@ mainEl.id = 'main';
 const diagramEl = document.createElement('div');
 diagramEl.id = 'diagram';
 diagramEl.innerHTML = `<div class="placeholder">Load a case to render the network.</div>`;
+const editorEl = document.createElement('div');
+editorEl.id = 'editor';
 const resultsEl = document.createElement('div');
 resultsEl.id = 'results-panel';
-mainEl.append(diagramEl, resultsEl);
+mainEl.append(diagramEl, editorEl, resultsEl);
 app.append(sidebarEl, mainEl);
 
 const results = mountResults(resultsEl);
+const editor = mountEditor(editorEl, {
+  onBusApply: (busId, patch) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(updateBus(net, busId, patch), 'edit');
+    results.setStatus(`Bus ${busId} updated — solve to refresh results.`);
+  },
+  onBranchApply: (branchIndex, patch) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(updateBranch(net, branchIndex, patch), 'edit');
+    const verb = patch.isInService === false ? 'tripped' : 'updated';
+    results.setStatus(`Branch #${branchIndex} ${verb} — solve to refresh results.`);
+  },
+  onClose: () => {
+    /* nothing extra — diagram selection stays as is */
+  },
+});
+
 const diagram = mountDiagram(diagramEl, (selection) => {
+  const net = network.get();
+  if (!net) return;
   switch (selection.kind) {
-    case 'bus':
+    case 'bus': {
+      const bus = net.buses.find((b) => b.id === selection.busId);
+      if (bus) editor.showBus(bus as BusDto);
       results.selectBus(selection.busId);
       break;
-    case 'branch':
+    }
+    case 'branch': {
+      const branch = net.branches.find((b) => b.index === selection.branchIndex);
+      if (branch) editor.showBranch(branch as BranchDto);
       results.selectBranch(selection.branchIndex);
       break;
+    }
     case 'none':
+      editor.hide();
       results.clearSelection();
       break;
   }
@@ -42,11 +79,16 @@ const sidebar = mountSidebar(sidebarEl, {
   onSolve: handleSolve,
 });
 
-network.subscribe((net) => {
+network.subscribe((net, kind) => {
   sidebar.setSolveEnabled(net !== null);
   sidebar.setBaseLoad(net ? totalLoadMw(net) : null);
-  diagram.setNetwork(net);
-  lastResult = null;
+  if (kind === 'load') {
+    diagram.setNetwork(net);
+    lastResult = null;
+    editor.hide();
+  } else if (net) {
+    diagram.applyEdit(net);
+  }
   if (net === null) {
     results.clear();
     diagramEl.querySelector('.placeholder')?.removeAttribute('hidden');
@@ -158,5 +200,4 @@ async function runAcStream(
   });
 }
 
-// Suppress unused warning until lastResult feeds the editing/contingency commits.
 void lastResult;

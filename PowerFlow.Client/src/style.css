@@ -93,6 +93,77 @@ body {
   display: none;
 }
 
+#editor {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0.7rem 1.1rem;
+}
+
+#editor[hidden] {
+  display: none;
+}
+
+.editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.editor-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.editor-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content 1fr max-content 1fr;
+  gap: 0.35rem 0.6rem;
+  align-items: center;
+}
+
+.editor-grid label {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.editor-grid input,
+.editor-grid select {
+  font: inherit;
+  font-family: var(--mono);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.editor-grid .cell-row {
+  display: flex;
+  align-items: center;
+}
+
+.editor-grid .cell-row input[type="checkbox"] {
+  margin: 0;
+}
+
+.editor-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 #results-panel {
   flex: 0 0 auto;
   max-height: 45vh;
