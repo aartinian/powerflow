@@ -1,5 +1,13 @@
 import './style.css';
-import { ApiValidationError, listCases, loadCase, solve, solveStream, validate } from './api.js';
+import {
+  ApiValidationError,
+  contingency,
+  listCases,
+  loadCase,
+  solve,
+  solveStream,
+  validate,
+} from './api.js';
 import {
   network,
   scaleLoads,
@@ -30,7 +38,9 @@ resultsEl.id = 'results-panel';
 mainEl.append(diagramEl, editorEl, resultsEl);
 app.append(sidebarEl, mainEl);
 
-const results = mountResults(resultsEl);
+const results = mountResults(resultsEl, {
+  onContingencyRowClick: (branchIndex) => diagram.focusBranch(branchIndex),
+});
 const editor = mountEditor(editorEl, {
   onBusApply: (busId, patch) => {
     const net = network.get();
@@ -77,6 +87,7 @@ let lastResult: SolveResultDto | null = null;
 const sidebar = mountSidebar(sidebarEl, {
   onLoadCase: handleLoadCase,
   onSolve: handleSolve,
+  onContingency: handleContingency,
 });
 
 network.subscribe((net, kind) => {
@@ -162,6 +173,43 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
     }
   } finally {
     sidebar.setSolveBusy(false);
+  }
+}
+
+async function handleContingency(options: SolveOptionsDto): Promise<void> {
+  const base = network.get();
+  if (!base) return;
+  const scale = sidebar.getLoadScale();
+  const net = scaleLoads(base, scale);
+  sidebar.setContingencyBusy(true);
+  const inSvc = net.branches.filter((b) => b.isInService).length;
+  results.setStatus(`Running N-1 sweep over ${inSvc} branch(es)…`);
+  try {
+    const rs = await contingency({ network: net, options });
+    results.showContingency(rs);
+    const worst = rs[0];
+    if (!worst) {
+      results.setStatus('Sweep returned no contingencies.', 'muted');
+    } else if (!worst.converged) {
+      results.setStatus(
+        `Sweep complete: ${rs.filter((r) => !r.converged).length} contingency(s) diverged — most severe at top.`,
+        'error',
+      );
+    } else {
+      results.setStatus(
+        `Sweep complete: ${rs.length} contingencies, worst max loading ${worst.maxLoadingPct?.toFixed(1) ?? '—'}%.`,
+        'ok',
+      );
+    }
+  } catch (err) {
+    if (err instanceof ApiValidationError) {
+      results.showValidation(err.result);
+      results.setStatus(`Validation failed (${err.result.errors.length} error(s))`, 'error');
+    } else {
+      results.setStatus(`Sweep failed: ${String(err)}`, 'error');
+    }
+  } finally {
+    sidebar.setContingencyBusy(false);
   }
 }
 

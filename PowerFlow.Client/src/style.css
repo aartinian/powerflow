@@ -276,6 +276,10 @@ table.datatable tbody tr.selected {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+table.datatable.clickable tbody tr {
+  cursor: pointer;
+}
+
 .cell-red {
   color: var(--error);
   font-weight: 600;

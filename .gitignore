@@ -427,3 +427,5 @@ FodyWeavers.xsd
 *.msp
 
 .DS_Store
+.cursor/
+.claude/

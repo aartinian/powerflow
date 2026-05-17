@@ -1,5 +1,6 @@
 import type {
   BusTypeChangeDto,
+  ContingencyResultDto,
   SolvedBranchDto,
   SolvedBusDto,
   SolvedGeneratorDto,
@@ -15,7 +16,12 @@ export type TabId =
   | 'buses'
   | 'branches'
   | 'generators'
-  | 'violations';
+  | 'violations'
+  | 'contingency';
+
+export interface ResultsCallbacks {
+  onContingencyRowClick: (branchIndex: number) => void;
+}
 
 export interface ResultsHandle {
   setStatus(message: string, kind?: 'muted' | 'ok' | 'error'): void;
@@ -28,13 +34,15 @@ export interface ResultsHandle {
   // Streaming hooks for /api/solve/stream
   beginStream(tolerance: number): void;
   pushIteration(iter: number, mismatch: number, changes: BusTypeChangeDto[]): void;
+  // N-1 sweep results
+  showContingency(results: ContingencyResultDto[]): void;
 }
 
 // Results panel: status line + tab strip + content area. The convergence
 // chart lives in its own permanently-mounted view so iter events keep
 // landing on the canvas even when the user has switched to another tab.
 // The other tabs render lazily from the last SolveResultDto on tab activation.
-export function mountResults(container: HTMLElement): ResultsHandle {
+export function mountResults(container: HTMLElement, callbacks: ResultsCallbacks): ResultsHandle {
   container.innerHTML = `
     <div class="status muted" id="status">No network loaded.</div>
     <ul class="errors" id="errors" hidden></ul>
@@ -45,6 +53,7 @@ export function mountResults(container: HTMLElement): ResultsHandle {
       <button class="tab" data-tab="branches">Branches</button>
       <button class="tab" data-tab="generators">Generators</button>
       <button class="tab" data-tab="violations" hidden>Violations</button>
+      <button class="tab" data-tab="contingency" hidden>Contingency</button>
     </div>
     <div class="tab-panel" id="panel" hidden>
       <div class="conv-host" id="conv-host" hidden></div>
@@ -56,12 +65,14 @@ export function mountResults(container: HTMLElement): ResultsHandle {
   const tabs = container.querySelector<HTMLDivElement>('#tabs')!;
   const convTab = tabs.querySelector<HTMLButtonElement>('[data-tab="convergence"]')!;
   const violationsTab = tabs.querySelector<HTMLButtonElement>('[data-tab="violations"]')!;
+  const ctgTab = tabs.querySelector<HTMLButtonElement>('[data-tab="contingency"]')!;
   const panel = container.querySelector<HTMLDivElement>('#panel')!;
   const convHost = container.querySelector<HTMLDivElement>('#conv-host')!;
   const dynView = container.querySelector<HTMLDivElement>('#dyn-view')!;
 
   const convergence: ConvergenceHandle = mountConvergence(convHost);
   let lastResult: SolveResultDto | null = null;
+  let lastContingency: ContingencyResultDto[] | null = null;
   let activeTab: TabId = 'summary';
 
   tabs.addEventListener('click', (ev) => {
@@ -85,6 +96,14 @@ export function mountResults(container: HTMLElement): ResultsHandle {
     }
     convHost.hidden = true;
     dynView.hidden = false;
+    if (tab === 'contingency') {
+      if (lastContingency) {
+        dynView.replaceChildren(renderContingency(lastContingency, callbacks.onContingencyRowClick));
+      } else {
+        dynView.replaceChildren();
+      }
+      return;
+    }
     if (!lastResult) {
       dynView.replaceChildren();
       return;
@@ -92,7 +111,10 @@ export function mountResults(container: HTMLElement): ResultsHandle {
     dynView.replaceChildren(renderPanel(tab, lastResult));
   }
 
-  function renderPanel(tab: Exclude<TabId, 'convergence'>, result: SolveResultDto): Node {
+  function renderPanel(
+    tab: Exclude<TabId, 'convergence' | 'contingency'>,
+    result: SolveResultDto,
+  ): Node {
     switch (tab) {
       case 'summary':
         return renderSummary(result);
@@ -154,6 +176,8 @@ export function mountResults(container: HTMLElement): ResultsHandle {
     },
     clear() {
       lastResult = null;
+      lastContingency = null;
+      ctgTab.hidden = true;
       clearErrors();
       tabs.hidden = true;
       panel.hidden = true;
@@ -184,6 +208,14 @@ export function mountResults(container: HTMLElement): ResultsHandle {
     },
     pushIteration(iter, mismatch, changes) {
       convergence.addPoint(iter, mismatch, changes);
+    },
+    showContingency(rs) {
+      lastContingency = rs;
+      tabs.hidden = false;
+      panel.hidden = false;
+      ctgTab.hidden = false;
+      ctgTab.textContent = rs.length > 0 ? `Contingency (${rs.length})` : 'Contingency';
+      showTab('contingency');
     },
   };
 }
@@ -267,6 +299,45 @@ function renderGenerators(gens: SolvedGeneratorDto[]): Node {
       ],
     })),
   );
+}
+
+function renderContingency(
+  results: ContingencyResultDto[],
+  onRowClick: (branchIndex: number) => void,
+): Node {
+  const table = buildTable(
+    ['#', 'From → To', 'Converged', 'Max Loading %', 'Overloads', 'V-Viol'],
+    results.map((c) => ({
+      id: `ctg-${c.branchIndex}`,
+      cells: [
+        String(c.branchIndex),
+        `${c.fromBusId} → ${c.toBusId}`,
+        c.converged ? 'yes' : { text: 'no', cls: 'cell-red' },
+        contingencyLoadingCell(c.maxLoadingPct),
+        c.branchOverloadCount > 0
+          ? { text: String(c.branchOverloadCount), cls: 'cell-red' }
+          : '0',
+        c.voltageViolationCount > 0
+          ? { text: String(c.voltageViolationCount), cls: 'cell-amber' }
+          : '0',
+      ],
+    })),
+  );
+  table.classList.add('clickable');
+  table.addEventListener('click', (ev) => {
+    const row = (ev.target as HTMLElement).closest<HTMLTableRowElement>('tr');
+    if (!row || !row.id.startsWith('ctg-')) return;
+    onRowClick(parseInt(row.id.slice(4), 10));
+  });
+  return table;
+}
+
+function contingencyLoadingCell(
+  pct: number | null,
+): string | { text: string; cls: string } {
+  if (pct === null) return '—';
+  const cls = pct >= 100 ? 'cell-red' : pct >= 90 ? 'cell-amber' : 'cell-green';
+  return { text: pct.toFixed(1), cls };
 }
 
 function renderViolations(violations: VoltageViolationDto[]): Node {

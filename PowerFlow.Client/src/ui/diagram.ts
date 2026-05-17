@@ -11,6 +11,7 @@ export interface DiagramHandle {
   setNetwork(network: NetworkDto | null): void;
   applyEdit(network: NetworkDto): void;
   setSolveResult(result: SolveResultDto | null): void;
+  focusBranch(branchIndex: number): void;
   resetView(): void;
   resize(): void;
   destroy(): void;
@@ -242,6 +243,15 @@ export function mountDiagram(
       if (!cy) return;
       if (result) applyResult(result);
       else clearResult();
+    },
+    focusBranch(branchIndex) {
+      if (!cy) return;
+      const edge = cy.$(`#e${branchIndex}`);
+      if (edge.empty()) return;
+      cy.elements().unselect();
+      edge.select();
+      cy.animate({ center: { eles: edge }, duration: 250 });
+      onSelect({ kind: 'branch', branchIndex });
     },
     resetView() {
       if (cy) cy.fit(undefined, 30);

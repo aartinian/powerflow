@@ -3,6 +3,7 @@ import type { CaseMetaDto, SolveOptionsDto } from '../types.js';
 export interface SidebarCallbacks {
   onLoadCase: (id: string) => void | Promise<void>;
   onSolve: (options: SolveOptionsDto) => void | Promise<void>;
+  onContingency: (options: SolveOptionsDto) => void | Promise<void>;
 }
 
 // Builds the sidebar DOM into `container`. Returns a small control object so
@@ -110,7 +111,21 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     void callbacks.onSolve(readOptions(solveSection));
   });
 
-  container.append(caseSection, stressSection, solveSection);
+  // ── Contingency section ─────────────────────────────────────────────────
+  // Re-uses the Solve form's options — same network / mode / tolerance the
+  // user just spent time configuring. The sweep solves every in-service
+  // branch trip in parallel on the server and returns severity-ranked rows.
+  const contingencySection = document.createElement('section');
+  contingencySection.innerHTML = `
+    <h2>Contingency</h2>
+    <button id="ctg-btn" class="secondary" disabled>Run N-1 sweep</button>
+  `;
+  const ctgBtn = contingencySection.querySelector<HTMLButtonElement>('#ctg-btn')!;
+  ctgBtn.addEventListener('click', () => {
+    void callbacks.onContingency(readOptions(solveSection));
+  });
+
+  container.append(caseSection, stressSection, solveSection, contingencySection);
 
   return {
     setCases(cases: CaseMetaDto[]) {
@@ -126,6 +141,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     },
     setSolveEnabled(enabled: boolean) {
       solveBtn.disabled = !enabled;
+      ctgBtn.disabled = !enabled;
     },
     setLoadBusy(busy: boolean) {
       loadBtn.disabled = busy;
@@ -134,6 +150,10 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     setSolveBusy(busy: boolean) {
       solveBtn.disabled = busy;
       solveBtn.textContent = busy ? 'Solving…' : 'Solve';
+    },
+    setContingencyBusy(busy: boolean) {
+      ctgBtn.disabled = busy;
+      ctgBtn.textContent = busy ? 'Running…' : 'Run N-1 sweep';
     },
     setBaseLoad(totalMw: number | null) {
       baseLoadMw = totalMw;
