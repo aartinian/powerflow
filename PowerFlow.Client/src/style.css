@@ -67,8 +67,39 @@ body {
 }
 
 #main {
-  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#diagram {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--bg);
+  position: relative;
+}
+
+#diagram .placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+  pointer-events: none;
+}
+
+#diagram .placeholder[hidden] {
+  display: none;
+}
+
+#results-panel {
+  flex: 0 0 auto;
+  max-height: 45vh;
   overflow: auto;
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .field {

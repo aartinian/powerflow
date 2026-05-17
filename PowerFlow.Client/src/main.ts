@@ -1,7 +1,8 @@
 import './style.css';
 import { ApiValidationError, listCases, loadCase, solve, validate } from './api.js';
 import { network } from './network.js';
-import type { SolveOptionsDto } from './types.js';
+import type { SolveOptionsDto, SolveResultDto } from './types.js';
+import { mountDiagram } from './ui/diagram.js';
 import { mountResults } from './ui/results.js';
 import { mountSidebar } from './ui/sidebar.js';
 
@@ -12,21 +13,39 @@ const sidebarEl = document.createElement('aside');
 sidebarEl.id = 'sidebar';
 const mainEl = document.createElement('main');
 mainEl.id = 'main';
+const diagramEl = document.createElement('div');
+diagramEl.id = 'diagram';
+diagramEl.innerHTML = `<div class="placeholder">Load a case to render the network.</div>`;
+const resultsEl = document.createElement('div');
+resultsEl.id = 'results-panel';
+mainEl.append(diagramEl, resultsEl);
 app.append(sidebarEl, mainEl);
 
-const results = mountResults(mainEl);
+const results = mountResults(resultsEl);
+const diagram = mountDiagram(diagramEl, () => {
+  // Selection wired to the results panel in a later commit; ignore for now.
+});
+let lastResult: SolveResultDto | null = null;
 
 const sidebar = mountSidebar(sidebarEl, {
   onLoadCase: handleLoadCase,
   onSolve: handleSolve,
 });
 
-// Whenever the network changes the solve button can light up; the results
-// panel resets so stale numbers don't linger after a new case is loaded.
 network.subscribe((net) => {
   sidebar.setSolveEnabled(net !== null);
-  if (net === null) results.clear();
+  diagram.setNetwork(net);
+  lastResult = null;
+  if (net === null) {
+    results.clear();
+    diagramEl.querySelector('.placeholder')?.removeAttribute('hidden');
+  } else {
+    const ph = diagramEl.querySelector('.placeholder');
+    if (ph) ph.setAttribute('hidden', '');
+  }
 });
+
+window.addEventListener('resize', () => diagram.resize());
 
 bootstrap().catch((err: unknown) => {
   results.setStatus(`Init failed: ${String(err)}`, 'error');
@@ -67,6 +86,8 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
   results.setStatus('Solving…');
   try {
     const result = await solve({ network: net, options });
+    lastResult = result;
+    diagram.setSolveResult(result);
     results.showSolve(result);
     results.setStatus(
       result.converged
@@ -85,3 +106,6 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
     sidebar.setSolveBusy(false);
   }
 }
+
+// Suppress unused warning until selection wiring lands in commit 12.
+void lastResult;

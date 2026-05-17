@@ -1,0 +1,290 @@
+import cytoscape from 'cytoscape';
+import type { Core, ElementDefinition } from 'cytoscape';
+import type { NetworkDto, SolveResultDto } from '../types.js';
+
+export type DiagramSelection =
+  | { kind: 'bus'; busId: number }
+  | { kind: 'branch'; branchIndex: number }
+  | { kind: 'none' };
+
+export interface DiagramHandle {
+  setNetwork(network: NetworkDto | null): void;
+  setSolveResult(result: SolveResultDto | null): void;
+  resetView(): void;
+  resize(): void;
+  destroy(): void;
+}
+
+// Cytoscape-based network diagram. Ported from PowerFlow.Web/wwwroot/diagram.js.
+// Visual tiers (node size, edge style, render hints) follow the same thresholds
+// as the original — kept intentionally tuned for 50 / 200 / 400 / 600 bus
+// breakpoints so the case14 → case300 spectrum stays readable on first paint.
+export function mountDiagram(
+  container: HTMLElement,
+  onSelect: (selection: DiagramSelection) => void,
+): DiagramHandle {
+  let cy: Core | null = null;
+  let currentNet: NetworkDto | null = null;
+
+  function buildElements(network: NetworkDto): ElementDefinition[] {
+    const nodes: ElementDefinition[] = network.buses.map((b) => ({
+      group: 'nodes',
+      data: { id: `b${b.id}`, label: String(b.id), busId: b.id, busType: b.type },
+    }));
+    const edges: ElementDefinition[] = network.branches
+      .filter((br) => br.isInService)
+      .map((br) => ({
+        group: 'edges',
+        data: {
+          id: `e${br.index}`,
+          source: `b${br.fromBusId}`,
+          target: `b${br.toBusId}`,
+          branchIndex: br.index,
+        },
+      }));
+    return [...nodes, ...edges];
+  }
+
+  function render(network: NetworkDto): void {
+    if (cy) {
+      try {
+        cy.destroy();
+      } catch {
+        // Old container already gone — destroying the dead instance can throw;
+        // safe to swallow because we're about to replace it anyway.
+      }
+      cy = null;
+    }
+    if (!container.isConnected) return;
+
+    const n = network.buses.length;
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const layout = pickLayout(n);
+    const tier = pickTier(n);
+
+    cy = cytoscape({
+      container,
+      elements: buildElements(network),
+      layout,
+      textureOnViewport: n > 200,
+      hideEdgesOnViewport: n > 400,
+      hideLabelsOnViewport: n > 100,
+      pixelRatio: n > 400 ? 1 : 'auto',
+      motionBlur: false,
+      wheelSensitivity: 0.2,
+      minZoom: 0.05,
+      maxZoom: 4,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            width: tier.nodeSize,
+            height: tier.nodeSize,
+            'background-color': (ele) => nodeColor(ele.data('vm'), ele.data('vmTone')),
+            label: n <= 57 ? 'data(label)' : '',
+            'font-size': 8,
+            color: dark ? '#94a3b8' : '#334155',
+            'text-background-color': dark ? '#162035' : '#ffffff',
+            'text-background-opacity': dark ? 0.65 : 0,
+            'text-background-padding': '2px',
+            'text-valign': 'center',
+            'text-halign': 'right',
+            'text-margin-x': 4,
+          },
+        },
+        {
+          selector: 'node:selected',
+          style: {
+            'border-width': n > 300 ? 2 : 3,
+            'border-color': '#2563eb',
+            'border-opacity': 1,
+          },
+        },
+        {
+          selector: 'edge',
+          style: {
+            width: tier.edgeWidth,
+            'line-color': (ele) => loadingColor(ele.data('loadingPct')),
+            'curve-style': tier.curveStyle,
+            opacity: tier.edgeOpacity,
+          },
+        },
+        {
+          selector: 'edge:selected',
+          style: {
+            width: Math.max(tier.edgeWidth * 2.3, 2.5),
+            opacity: 1,
+            'line-color': '#2563eb',
+          },
+        },
+      ],
+    });
+
+    cy.on('tap', 'node', (evt) => {
+      const node = evt.target;
+      cy!.elements().unselect();
+      node.select();
+      onSelect({ kind: 'bus', busId: node.data('busId') as number });
+    });
+    cy.on('tap', 'edge', (evt) => {
+      const edge = evt.target;
+      cy!.elements().unselect();
+      edge.select();
+      onSelect({ kind: 'branch', branchIndex: edge.data('branchIndex') as number });
+    });
+    cy.on('tap', (evt) => {
+      if (evt.target === cy) {
+        cy!.elements().unselect();
+        onSelect({ kind: 'none' });
+      }
+    });
+  }
+
+  // Pushes the solve result's vm/loadingPct (and DC tone) onto the existing
+  // graph, then restyles in place. Avoids rebuilding the layout, so the user
+  // doesn't lose their pan/zoom or watch nodes jitter into new positions.
+  function applyResult(result: SolveResultDto): void {
+    if (!cy) return;
+    const isDc = result.mode === 'DC';
+
+    const busVm = new Map<number, number | null>();
+    let minVa = Number.POSITIVE_INFINITY;
+    let maxVa = Number.NEGATIVE_INFINITY;
+    for (const b of result.buses) {
+      busVm.set(b.busId, b.vm);
+      if (b.va < minVa) minVa = b.va;
+      if (b.va > maxVa) maxVa = b.va;
+    }
+    // DC: bucket Va deviation into 0/1/2 severity. Threshold ratios chosen
+    // empirically to keep most case14 buses at "fine" and stress only the
+    // tail. AC ignores this and uses vm directly.
+    const vaSpan = Math.max(1e-6, maxVa - minVa);
+    const busTone = new Map<number, number>();
+    if (isDc) {
+      for (const b of result.buses) {
+        const frac = Math.abs(b.va - (maxVa + minVa) / 2) / (vaSpan / 2);
+        busTone.set(b.busId, frac > 0.66 ? 2 : frac > 0.33 ? 1 : 0);
+      }
+    }
+
+    cy.nodes().forEach((node) => {
+      const id = node.data('busId') as number;
+      node.data('vm', isDc ? null : (busVm.get(id) ?? null));
+      node.data('vmTone', busTone.get(id) ?? 0);
+    });
+
+    const edgeLoading = new Map<number, number | null>();
+    for (const br of result.branches) edgeLoading.set(br.branchIndex, br.loadingPct);
+    cy.edges().forEach((edge) => {
+      const idx = edge.data('branchIndex') as number;
+      edge.data('loadingPct', edgeLoading.get(idx) ?? null);
+    });
+
+    cy.style().update();
+  }
+
+  function clearResult(): void {
+    if (!cy) return;
+    cy.nodes().forEach((node) => {
+      node.data('vm', null);
+      node.data('vmTone', 0);
+    });
+    cy.edges().forEach((edge) => {
+      edge.data('loadingPct', null);
+    });
+    cy.style().update();
+  }
+
+  return {
+    setNetwork(network) {
+      currentNet = network;
+      if (network) render(network);
+      else if (cy) {
+        cy.destroy();
+        cy = null;
+      }
+    },
+    setSolveResult(result) {
+      if (!cy && currentNet) render(currentNet);
+      if (!cy) return;
+      if (result) applyResult(result);
+      else clearResult();
+    },
+    resetView() {
+      if (cy) cy.fit(undefined, 30);
+    },
+    resize() {
+      if (cy) cy.resize();
+    },
+    destroy() {
+      if (cy) {
+        cy.destroy();
+        cy = null;
+      }
+      currentNet = null;
+    },
+  };
+}
+
+// ── Layout & visual tiering ─────────────────────────────────────────────────
+
+function pickLayout(n: number): cytoscape.LayoutOptions {
+  // Above ~600 buses cose is too slow on first paint, so fall back to a
+  // concentric layout that at least groups slack/PV/PQ buses into rings.
+  if (n <= 100)
+    return { name: 'cose', animate: false, randomize: true, nodeRepulsion: () => 4096, idealEdgeLength: () => 50, numIter: 500 };
+  if (n <= 300)
+    return { name: 'cose', animate: false, randomize: true, nodeRepulsion: () => 8192, idealEdgeLength: () => 40, numIter: 250, gravity: 0.6 };
+  if (n <= 600)
+    return { name: 'cose', animate: false, randomize: true, nodeRepulsion: () => 12000, idealEdgeLength: () => 30, numIter: 120, gravity: 0.8 };
+  return {
+    name: 'concentric',
+    animate: false,
+    padding: 30,
+    spacingFactor: 0.7,
+    concentric: (ele) => {
+      const t = ele.data('busType') as string;
+      return t === 'Slack' ? 3 : t === 'PV' ? 2 : 1;
+    },
+    levelWidth: () => 1,
+  };
+}
+
+interface VisualTier {
+  nodeSize: number;
+  edgeWidth: number;
+  edgeOpacity: number;
+  curveStyle: 'haystack' | 'bezier';
+}
+
+function pickTier(n: number): VisualTier {
+  // edgeOpacity / curveStyle break at 200 while node sizes step at 50/100;
+  // intentional — haystack edges are the cheapest perf win and kick in earlier.
+  if (n > 500) return { nodeSize: 5, edgeWidth: 0.6, edgeOpacity: 0.25, curveStyle: 'haystack' };
+  if (n > 300) return { nodeSize: 7, edgeWidth: 0.9, edgeOpacity: 0.4, curveStyle: 'haystack' };
+  if (n > 200) return { nodeSize: 10, edgeWidth: 1.1, edgeOpacity: 0.4, curveStyle: 'haystack' };
+  if (n > 100) return { nodeSize: 10, edgeWidth: 1.1, edgeOpacity: 0.55, curveStyle: 'bezier' };
+  if (n > 50) return { nodeSize: 14, edgeWidth: 1.5, edgeOpacity: 0.7, curveStyle: 'bezier' };
+  return { nodeSize: 18, edgeWidth: 1.5, edgeOpacity: 0.7, curveStyle: 'bezier' };
+}
+
+// ── Colour helpers ──────────────────────────────────────────────────────────
+
+function nodeColor(vm: number | null | undefined, vmTone: number | undefined): string {
+  if (typeof vm === 'number') {
+    if (vm < 0.95) return '#ef4444';
+    if (vm > 1.05) return '#f59e0b';
+    return '#22c55e';
+  }
+  // DC path or pre-solve. Tone undefined / 0 ⇒ neutral.
+  if (vmTone === 2) return '#ef4444';
+  if (vmTone === 1) return '#f59e0b';
+  return '#94a3b8';
+}
+
+function loadingColor(pct: number | null | undefined): string {
+  if (typeof pct !== 'number' || Number.isNaN(pct)) return '#94a3b8';
+  if (pct >= 90) return '#ef4444';
+  if (pct >= 70) return '#f59e0b';
+  return '#22c55e';
+}
