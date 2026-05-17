@@ -1,6 +1,7 @@
 using PowerFlow.Api.Dtos;
 using PowerFlow.Core.Models;
 using PowerFlow.Core.Solver;
+using PowerFlow.Core.Validation;
 
 namespace PowerFlow.Api.Mapping;
 
@@ -331,4 +332,18 @@ internal static class NetworkMapper
         }
         return [.. output];
     }
+
+    // ── ValidationResult → ValidationResultDto ───────────────────────────────
+
+    internal static ValidationResultDto ToDto(this ValidationResult result) =>
+        new(
+            result.IsValid,
+            result
+                .Errors.Select(e => new ValidationErrorDto(
+                    e.Code,
+                    e.Message,
+                    e.Severity == ValidationSeverity.Warning ? "Warning" : "Error"
+                ))
+                .ToArray()
+        );
 }
