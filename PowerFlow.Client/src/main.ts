@@ -4,6 +4,7 @@ import {
   contingency,
   listCases,
   loadCase,
+  parseCase,
   solve,
   solveStream,
   validate,
@@ -18,26 +19,82 @@ import {
 import type { BranchDto, BusDto, NetworkDto, SolveOptionsDto, SolveResultDto } from './types.js';
 import { mountDiagram } from './ui/diagram.js';
 import { mountEditor } from './ui/editor.js';
+import { mountHeader } from './ui/header.js';
+import { mountKpi } from './ui/kpi.js';
 import { mountResults } from './ui/results.js';
 import { mountSidebar } from './ui/sidebar.js';
+
+const CLIENT_VERSION = '2.0';
 
 const app = document.getElementById('app');
 if (!app) throw new Error('#app not found');
 
+// ── Shell ────────────────────────────────────────────────────────────────────
+const headerEl = document.createElement('header');
+headerEl.id = 'header';
+const bodyEl = document.createElement('div');
+bodyEl.id = 'app-body';
 const sidebarEl = document.createElement('aside');
 sidebarEl.id = 'sidebar';
 const mainEl = document.createElement('main');
 mainEl.id = 'main';
+const footerEl = document.createElement('footer');
+footerEl.id = 'footer';
+
+// Main pane: KPI bar / diagram (with fit+legend overlays) / editor / results
+const kpiEl = document.createElement('div');
+kpiEl.id = 'kpi-bar';
+const diagramWrap = document.createElement('div');
+diagramWrap.id = 'diagram-wrap';
 const diagramEl = document.createElement('div');
 diagramEl.id = 'diagram';
 diagramEl.innerHTML = `<div class="placeholder">Load a case to render the network.</div>`;
+const fitBtn = document.createElement('button');
+fitBtn.id = 'diagram-fit';
+fitBtn.className = 'secondary mini';
+fitBtn.title = 'Fit network to view';
+fitBtn.textContent = '⤢ Fit';
+fitBtn.hidden = true;
+const legendEl = document.createElement('div');
+legendEl.id = 'diagram-legend';
+legendEl.hidden = true;
+legendEl.innerHTML = `
+  <div class="legend-row"><span class="legend-key">BUSES</span>
+    <span class="swatch ok"></span>0.95–1.05 pu
+    <span class="swatch warn"></span>over-voltage
+    <span class="swatch err"></span>under-voltage
+  </div>
+  <div class="legend-row"><span class="legend-key">BRANCHES</span>
+    <span class="swatch ok"></span>&lt;70%
+    <span class="swatch warn"></span>70–90%
+    <span class="swatch err"></span>≥90%
+  </div>
+`;
+diagramWrap.append(diagramEl, fitBtn, legendEl);
 const editorEl = document.createElement('div');
 editorEl.id = 'editor';
 const resultsEl = document.createElement('div');
 resultsEl.id = 'results-panel';
-mainEl.append(diagramEl, editorEl, resultsEl);
-app.append(sidebarEl, mainEl);
+mainEl.append(kpiEl, diagramWrap, editorEl, resultsEl);
 
+bodyEl.append(sidebarEl, mainEl);
+app.append(headerEl, bodyEl, footerEl);
+
+footerEl.innerHTML = `
+  <div class="footer-left">Built by <a href="https://github.com/aartinian" target="_blank" rel="noreferrer">aart</a> · <a href="https://github.com/aartinian/powerflow" target="_blank" rel="noreferrer">github.com/aartinian/powerflow</a></div>
+  <div class="footer-right">
+    <span class="tech-pill">C# · .NET 10</span>
+    <span class="tech-pill">ASP.NET Minimal API</span>
+    <span class="tech-pill">CSparse (sparse LU)</span>
+    <span class="tech-pill">TypeScript + Vite</span>
+    <span class="tech-pill">Cytoscape.js</span>
+  </div>
+`;
+
+mountHeader(headerEl, CLIENT_VERSION);
+
+// ── UI components ────────────────────────────────────────────────────────────
+const kpi = mountKpi(kpiEl);
 const results = mountResults(resultsEl, {
   onContingencyRowClick: (branchIndex) => diagram.focusBranch(branchIndex),
 });
@@ -56,7 +113,7 @@ const editor = mountEditor(editorEl, {
     results.setStatus(`Branch #${branchIndex} ${verb} — solve to refresh results.`);
   },
   onClose: () => {
-    /* nothing extra — diagram selection stays as is */
+    /* keep diagram selection as is */
   },
 });
 
@@ -82,10 +139,13 @@ const diagram = mountDiagram(diagramEl, (selection) => {
       break;
   }
 });
+fitBtn.addEventListener('click', () => diagram.resetView());
+
 let lastResult: SolveResultDto | null = null;
 
 const sidebar = mountSidebar(sidebarEl, {
   onLoadCase: handleLoadCase,
+  onUploadCase: handleUploadCase,
   onSolve: handleSolve,
   onContingency: handleContingency,
 });
@@ -93,13 +153,18 @@ const sidebar = mountSidebar(sidebarEl, {
 network.subscribe((net, kind) => {
   sidebar.setSolveEnabled(net !== null);
   sidebar.setBaseLoad(net ? totalLoadMw(net) : null);
+  kpi.setNetwork(net);
   if (kind === 'load') {
     diagram.setNetwork(net);
     lastResult = null;
     editor.hide();
+    sidebar.showResult(null);
+    kpi.setResult(null);
   } else if (net) {
     diagram.applyEdit(net);
   }
+  fitBtn.hidden = net === null;
+  legendEl.hidden = net === null;
   if (net === null) {
     results.clear();
     diagramEl.querySelector('.placeholder')?.removeAttribute('hidden');
@@ -121,26 +186,40 @@ async function bootstrap(): Promise<void> {
 }
 
 async function handleLoadCase(id: string): Promise<void> {
-  sidebar.setLoadBusy(true);
   results.setStatus(`Loading ${id}…`);
   try {
     const net = await loadCase(id);
     network.set(net);
-    const validation = await validate(net);
-    if (!validation.isValid) {
-      results.setStatus(`${id} loaded with ${validation.errors.length} error(s)`, 'error');
-      results.showValidation(validation);
-    } else {
-      results.setStatus(
-        `${net.name ?? id} — ${net.buses.length} buses, ${net.branches.length} branches, ${net.generators.length} generators`,
-        'ok',
-      );
-    }
+    sidebar.setActiveCase(id);
+    afterNetworkLoad(net, id);
   } catch (err) {
     results.setStatus(`Load failed: ${String(err)}`, 'error');
-  } finally {
-    sidebar.setLoadBusy(false);
   }
+}
+
+async function handleUploadCase(filename: string, content: string): Promise<void> {
+  results.setStatus(`Parsing ${filename}…`);
+  try {
+    const net = await parseCase(content);
+    network.set(net);
+    sidebar.setActiveCase(null);
+    afterNetworkLoad(net, filename);
+  } catch (err) {
+    results.setStatus(`Parse failed: ${String(err)}`, 'error');
+  }
+}
+
+async function afterNetworkLoad(net: NetworkDto, label: string): Promise<void> {
+  const validation = await validate(net);
+  if (!validation.isValid) {
+    results.setStatus(`${label} loaded with ${validation.errors.length} error(s)`, 'error');
+    results.showValidation(validation);
+    return;
+  }
+  results.setStatus(
+    `${net.name ?? label} — ${net.buses.length} buses, ${net.branches.length} branches, ${net.generators.length} generators`,
+    'ok',
+  );
 }
 
 async function handleSolve(options: SolveOptionsDto): Promise<void> {
@@ -158,6 +237,8 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
     lastResult = result;
     diagram.setSolveResult(result);
     results.showSolve(result);
+    kpi.setResult(result);
+    sidebar.showResult(result);
     results.setStatus(
       result.converged
         ? `Converged in ${result.iterations} iteration(s).`
@@ -213,9 +294,6 @@ async function handleContingency(options: SolveOptionsDto): Promise<void> {
   }
 }
 
-// Streams AC iterations into the convergence chart and returns the final
-// SolveResultDto. A server-emitted `error` event is rethrown so the catch
-// block in handleSolve renders it like any other failure.
 async function runAcStream(
   net: NetworkDto,
   options: SolveOptionsDto,
