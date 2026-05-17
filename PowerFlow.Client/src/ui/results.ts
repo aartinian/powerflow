@@ -1,4 +1,5 @@
 import type {
+  BusTypeChangeDto,
   SolvedBranchDto,
   SolvedBusDto,
   SolvedGeneratorDto,
@@ -6,8 +7,15 @@ import type {
   ValidationResultDto,
   VoltageViolationDto,
 } from '../types.js';
+import { mountConvergence, type ConvergenceHandle } from './convergence.js';
 
-export type TabId = 'summary' | 'buses' | 'branches' | 'generators' | 'violations';
+export type TabId =
+  | 'summary'
+  | 'convergence'
+  | 'buses'
+  | 'branches'
+  | 'generators'
+  | 'violations';
 
 export interface ResultsHandle {
   setStatus(message: string, kind?: 'muted' | 'ok' | 'error'): void;
@@ -17,38 +25,49 @@ export interface ResultsHandle {
   selectBus(busId: number): void;
   selectBranch(branchIndex: number): void;
   clearSelection(): void;
+  // Streaming hooks for /api/solve/stream
+  beginStream(tolerance: number): void;
+  pushIteration(iter: number, mismatch: number, changes: BusTypeChangeDto[]): void;
 }
 
-// Results panel with a tab strip on top and one scrollable content area below.
-// Tables are rebuilt on every solve — cheap enough at case300 (411 branches)
-// and keeps the code path single-shot rather than diffing rows.
+// Results panel: status line + tab strip + content area. The convergence
+// chart lives in its own permanently-mounted view so iter events keep
+// landing on the canvas even when the user has switched to another tab.
+// The other tabs render lazily from the last SolveResultDto on tab activation.
 export function mountResults(container: HTMLElement): ResultsHandle {
   container.innerHTML = `
     <div class="status muted" id="status">No network loaded.</div>
     <ul class="errors" id="errors" hidden></ul>
     <div class="tabs" id="tabs" hidden>
       <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="convergence" hidden>Convergence</button>
       <button class="tab" data-tab="buses">Buses</button>
       <button class="tab" data-tab="branches">Branches</button>
       <button class="tab" data-tab="generators">Generators</button>
       <button class="tab" data-tab="violations" hidden>Violations</button>
     </div>
-    <div class="tab-panel" id="panel" hidden></div>
+    <div class="tab-panel" id="panel" hidden>
+      <div class="conv-host" id="conv-host" hidden></div>
+      <div class="dyn-view" id="dyn-view"></div>
+    </div>
   `;
   const status = container.querySelector<HTMLDivElement>('#status')!;
   const errors = container.querySelector<HTMLUListElement>('#errors')!;
   const tabs = container.querySelector<HTMLDivElement>('#tabs')!;
+  const convTab = tabs.querySelector<HTMLButtonElement>('[data-tab="convergence"]')!;
   const violationsTab = tabs.querySelector<HTMLButtonElement>('[data-tab="violations"]')!;
   const panel = container.querySelector<HTMLDivElement>('#panel')!;
+  const convHost = container.querySelector<HTMLDivElement>('#conv-host')!;
+  const dynView = container.querySelector<HTMLDivElement>('#dyn-view')!;
 
+  const convergence: ConvergenceHandle = mountConvergence(convHost);
   let lastResult: SolveResultDto | null = null;
   let activeTab: TabId = 'summary';
 
   tabs.addEventListener('click', (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.tab');
-    if (!btn) return;
-    const tab = btn.dataset['tab'] as TabId;
-    showTab(tab);
+    if (!btn || btn.hidden) return;
+    showTab(btn.dataset['tab'] as TabId);
   });
 
   function showTab(tab: TabId): void {
@@ -56,14 +75,24 @@ export function mountResults(container: HTMLElement): ResultsHandle {
     for (const t of tabs.querySelectorAll<HTMLButtonElement>('.tab')) {
       t.classList.toggle('active', t.dataset['tab'] === tab);
     }
-    if (!lastResult) {
-      panel.replaceChildren();
+    if (tab === 'convergence') {
+      convHost.hidden = false;
+      dynView.hidden = true;
+      // Container is freshly visible — force a redraw so the canvas
+      // picks up its real pixel size.
+      convergence.resize();
       return;
     }
-    panel.replaceChildren(renderPanel(tab, lastResult));
+    convHost.hidden = true;
+    dynView.hidden = false;
+    if (!lastResult) {
+      dynView.replaceChildren();
+      return;
+    }
+    dynView.replaceChildren(renderPanel(tab, lastResult));
   }
 
-  function renderPanel(tab: TabId, result: SolveResultDto): Node {
+  function renderPanel(tab: Exclude<TabId, 'convergence'>, result: SolveResultDto): Node {
     switch (tab) {
       case 'summary':
         return renderSummary(result);
@@ -84,9 +113,9 @@ export function mountResults(container: HTMLElement): ResultsHandle {
   }
 
   function focusRow(rowId: string): void {
-    const row = panel.querySelector<HTMLTableRowElement>(`#${rowId}`);
+    const row = dynView.querySelector<HTMLTableRowElement>(`#${rowId}`);
     if (!row) return;
-    for (const tr of panel.querySelectorAll('tr.selected')) tr.classList.remove('selected');
+    for (const tr of dynView.querySelectorAll('tr.selected')) tr.classList.remove('selected');
     row.classList.add('selected');
     row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
@@ -101,18 +130,19 @@ export function mountResults(container: HTMLElement): ResultsHandle {
       lastResult = result;
       tabs.hidden = false;
       panel.hidden = false;
+      // Convergence tab is only meaningful for AC — DC is a single LU step.
+      convTab.hidden = result.mode !== 'AC';
       violationsTab.hidden = result.violations.length === 0;
       violationsTab.textContent =
         result.violations.length > 0 ? `Violations (${result.violations.length})` : 'Violations';
-      // Snap back to Summary on every fresh solve — the previous selection
-      // is rarely the row the user wants to see first.
+      // Snap back to Summary on every fresh solve.
       showTab('summary');
     },
     showValidation(result) {
       lastResult = null;
       tabs.hidden = true;
       panel.hidden = true;
-      panel.replaceChildren();
+      dynView.replaceChildren();
       errors.hidden = false;
       errors.innerHTML = '';
       for (const err of result.errors) {
@@ -127,7 +157,7 @@ export function mountResults(container: HTMLElement): ResultsHandle {
       clearErrors();
       tabs.hidden = true;
       panel.hidden = true;
-      panel.replaceChildren();
+      dynView.replaceChildren();
     },
     selectBus(busId) {
       if (!lastResult) return;
@@ -140,7 +170,20 @@ export function mountResults(container: HTMLElement): ResultsHandle {
       focusRow(`brn-${branchIndex}`);
     },
     clearSelection() {
-      for (const tr of panel.querySelectorAll('tr.selected')) tr.classList.remove('selected');
+      for (const tr of dynView.querySelectorAll('tr.selected')) tr.classList.remove('selected');
+    },
+    beginStream(tolerance) {
+      // AC stream starting — clear chart, expose tab, and switch to it so
+      // the user watches iterations live instead of staring at empty space.
+      convergence.reset(tolerance);
+      tabs.hidden = false;
+      panel.hidden = false;
+      convTab.hidden = false;
+      lastResult = null;
+      showTab('convergence');
+    },
+    pushIteration(iter, mismatch, changes) {
+      convergence.addPoint(iter, mismatch, changes);
     },
   };
 }

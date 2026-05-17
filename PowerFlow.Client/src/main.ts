@@ -1,5 +1,5 @@
 import './style.css';
-import { ApiValidationError, listCases, loadCase, solve, validate } from './api.js';
+import { ApiValidationError, listCases, loadCase, solve, solveStream, validate } from './api.js';
 import { network } from './network.js';
 import type { SolveOptionsDto, SolveResultDto } from './types.js';
 import { mountDiagram } from './ui/diagram.js';
@@ -95,7 +95,10 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
   sidebar.setSolveBusy(true);
   results.setStatus('Solving…');
   try {
-    const result = await solve({ network: net, options });
+    const result =
+      options.mode === 'AC'
+        ? await runAcStream(net, options)
+        : await solve({ network: net, options });
     lastResult = result;
     diagram.setSolveResult(result);
     results.showSolve(result);
@@ -117,5 +120,40 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
   }
 }
 
-// Suppress unused warning until selection wiring lands in commit 12.
+// Streams AC iterations into the convergence chart and returns the final
+// SolveResultDto. A server-emitted `error` event is rethrown so the catch
+// block in handleSolve renders it like any other failure.
+async function runAcStream(
+  net: ReturnType<typeof network.get> & object,
+  options: SolveOptionsDto,
+): Promise<SolveResultDto> {
+  results.beginStream(options.tolerance);
+  return new Promise<SolveResultDto>((resolve, reject) => {
+    let settled = false;
+    solveStream({ network: net, options }, (event) => {
+      switch (event.type) {
+        case 'iter':
+          results.pushIteration(event.iter, event.mismatch, event.busTypeChanges);
+          break;
+        case 'result':
+          settled = true;
+          resolve(event.result);
+          break;
+        case 'error':
+          settled = true;
+          reject(new Error(event.message));
+          break;
+      }
+    }).then(
+      () => {
+        if (!settled) reject(new Error('Stream ended without a result event'));
+      },
+      (err: unknown) => {
+        if (!settled) reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
+}
+
+// Suppress unused warning until lastResult feeds the editing/contingency commits.
 void lastResult;
