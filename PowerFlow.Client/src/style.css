@@ -272,6 +272,36 @@ button.secondary {
   color: var(--accent);
 }
 
+button.mini {
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.slider-row input[type="range"] {
+  flex: 1 1 auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.slider-row input[type="range"]:disabled {
+  opacity: 0.5;
+}
+
+.readout {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+
 .summary {
   font-family: var(--mono);
   white-space: pre-wrap;

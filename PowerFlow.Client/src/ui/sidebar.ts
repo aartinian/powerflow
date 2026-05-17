@@ -29,6 +29,45 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     if (caseSelect.value) void callbacks.onLoadCase(caseSelect.value);
   });
 
+  // ── Load scaling section ────────────────────────────────────────────────
+  // Multiplies every bus's Pd / Qd by the slider value at solve time. The
+  // canonical network in the store stays at the originally-loaded values so
+  // dragging from 120% back to 90% scales the *base*, not the previous scale.
+  const stressSection = document.createElement('section');
+  stressSection.innerHTML = `
+    <h2>Load scaling</h2>
+    <div class="field">
+      <div class="slider-row">
+        <input type="range" id="load-scale" min="50" max="200" step="5" value="100" disabled />
+        <button id="load-reset" class="secondary mini" title="Reset to 100%" disabled>↺</button>
+      </div>
+      <div class="readout" id="load-readout">100% — load a case</div>
+    </div>
+  `;
+  const scaleInput = stressSection.querySelector<HTMLInputElement>('#load-scale')!;
+  const resetBtn = stressSection.querySelector<HTMLButtonElement>('#load-reset')!;
+  const readout = stressSection.querySelector<HTMLDivElement>('#load-readout')!;
+  let baseLoadMw: number | null = null;
+
+  function refreshReadout() {
+    const pct = scaleInput.valueAsNumber;
+    if (baseLoadMw === null) {
+      readout.textContent = `${pct}% — load a case`;
+      return;
+    }
+    const scaled = (baseLoadMw * pct) / 100;
+    readout.textContent =
+      pct === 100
+        ? `100% — ${baseLoadMw.toFixed(1)} MW`
+        : `${pct}% — ${scaled.toFixed(1)} MW (base ${baseLoadMw.toFixed(1)} MW)`;
+  }
+
+  scaleInput.addEventListener('input', refreshReadout);
+  resetBtn.addEventListener('click', () => {
+    scaleInput.value = '100';
+    refreshReadout();
+  });
+
   // ── Solve options section ───────────────────────────────────────────────
   const solveSection = document.createElement('section');
   solveSection.innerHTML = `
@@ -71,7 +110,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     void callbacks.onSolve(readOptions(solveSection));
   });
 
-  container.append(caseSection, solveSection);
+  container.append(caseSection, stressSection, solveSection);
 
   return {
     setCases(cases: CaseMetaDto[]) {
@@ -95,6 +134,17 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     setSolveBusy(busy: boolean) {
       solveBtn.disabled = busy;
       solveBtn.textContent = busy ? 'Solving…' : 'Solve';
+    },
+    setBaseLoad(totalMw: number | null) {
+      baseLoadMw = totalMw;
+      const enabled = totalMw !== null;
+      scaleInput.disabled = !enabled;
+      resetBtn.disabled = !enabled;
+      if (!enabled) scaleInput.value = '100';
+      refreshReadout();
+    },
+    getLoadScale(): number {
+      return scaleInput.valueAsNumber / 100;
     },
   };
 }

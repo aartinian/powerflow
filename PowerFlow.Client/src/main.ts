@@ -1,7 +1,7 @@
 import './style.css';
 import { ApiValidationError, listCases, loadCase, solve, solveStream, validate } from './api.js';
-import { network } from './network.js';
-import type { SolveOptionsDto, SolveResultDto } from './types.js';
+import { network, scaleLoads, totalLoadMw } from './network.js';
+import type { NetworkDto, SolveOptionsDto, SolveResultDto } from './types.js';
 import { mountDiagram } from './ui/diagram.js';
 import { mountResults } from './ui/results.js';
 import { mountSidebar } from './ui/sidebar.js';
@@ -44,6 +44,7 @@ const sidebar = mountSidebar(sidebarEl, {
 
 network.subscribe((net) => {
   sidebar.setSolveEnabled(net !== null);
+  sidebar.setBaseLoad(net ? totalLoadMw(net) : null);
   diagram.setNetwork(net);
   lastResult = null;
   if (net === null) {
@@ -90,10 +91,12 @@ async function handleLoadCase(id: string): Promise<void> {
 }
 
 async function handleSolve(options: SolveOptionsDto): Promise<void> {
-  const net = network.get();
-  if (!net) return;
+  const base = network.get();
+  if (!base) return;
+  const scale = sidebar.getLoadScale();
+  const net = scaleLoads(base, scale);
   sidebar.setSolveBusy(true);
-  results.setStatus('Solving…');
+  results.setStatus(scale === 1 ? 'Solving…' : `Solving at ${Math.round(scale * 100)}% load…`);
   try {
     const result =
       options.mode === 'AC'
@@ -124,7 +127,7 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
 // SolveResultDto. A server-emitted `error` event is rethrown so the catch
 // block in handleSolve renders it like any other failure.
 async function runAcStream(
-  net: ReturnType<typeof network.get> & object,
+  net: NetworkDto,
   options: SolveOptionsDto,
 ): Promise<SolveResultDto> {
   results.beginStream(options.tolerance);

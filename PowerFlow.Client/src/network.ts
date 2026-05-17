@@ -31,3 +31,22 @@ export class NetworkStore {
 
 // Module-level singleton — there's only one network loaded at a time.
 export const network = new NetworkStore();
+
+// Returns a copy of `net` with every bus's Pd / Qd multiplied by `factor`.
+// Used by the load-scaling slider — kept as a pure function so the canonical
+// network in the store stays at the originally-loaded values and re-scaling
+// from 120% to 90% is relative to the base, not compounded.
+export function scaleLoads(net: NetworkDto, factor: number): NetworkDto {
+  if (factor === 1) return net;
+  return {
+    ...net,
+    buses: net.buses.map((b) => ({ ...b, pd: b.pd * factor, qd: b.qd * factor })),
+  };
+}
+
+// Total active load (sum of Pd across all buses), in MW.
+export function totalLoadMw(net: NetworkDto): number {
+  let sum = 0;
+  for (const b of net.buses) sum += b.pd;
+  return sum;
+}
