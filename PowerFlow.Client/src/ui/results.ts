@@ -1,34 +1,118 @@
-import type { SolveResultDto, ValidationResultDto } from '../types.js';
+import type {
+  SolvedBranchDto,
+  SolvedBusDto,
+  SolvedGeneratorDto,
+  SolveResultDto,
+  ValidationResultDto,
+  VoltageViolationDto,
+} from '../types.js';
 
-// Minimal results panel — solve summary + status line. Per-bus / per-branch
-// tables and the convergence chart land in later commits.
-export function mountResults(container: HTMLElement) {
+export type TabId = 'summary' | 'buses' | 'branches' | 'generators' | 'violations';
+
+export interface ResultsHandle {
+  setStatus(message: string, kind?: 'muted' | 'ok' | 'error'): void;
+  showSolve(result: SolveResultDto): void;
+  showValidation(result: ValidationResultDto): void;
+  clear(): void;
+  selectBus(busId: number): void;
+  selectBranch(branchIndex: number): void;
+  clearSelection(): void;
+}
+
+// Results panel with a tab strip on top and one scrollable content area below.
+// Tables are rebuilt on every solve — cheap enough at case300 (411 branches)
+// and keeps the code path single-shot rather than diffing rows.
+export function mountResults(container: HTMLElement): ResultsHandle {
   container.innerHTML = `
     <div class="status muted" id="status">No network loaded.</div>
-    <div class="summary" id="summary" hidden></div>
     <ul class="errors" id="errors" hidden></ul>
+    <div class="tabs" id="tabs" hidden>
+      <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="buses">Buses</button>
+      <button class="tab" data-tab="branches">Branches</button>
+      <button class="tab" data-tab="generators">Generators</button>
+      <button class="tab" data-tab="violations" hidden>Violations</button>
+    </div>
+    <div class="tab-panel" id="panel" hidden></div>
   `;
   const status = container.querySelector<HTMLDivElement>('#status')!;
-  const summary = container.querySelector<HTMLDivElement>('#summary')!;
   const errors = container.querySelector<HTMLUListElement>('#errors')!;
+  const tabs = container.querySelector<HTMLDivElement>('#tabs')!;
+  const violationsTab = tabs.querySelector<HTMLButtonElement>('[data-tab="violations"]')!;
+  const panel = container.querySelector<HTMLDivElement>('#panel')!;
 
-  function clearErrors() {
+  let lastResult: SolveResultDto | null = null;
+  let activeTab: TabId = 'summary';
+
+  tabs.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.tab');
+    if (!btn) return;
+    const tab = btn.dataset['tab'] as TabId;
+    showTab(tab);
+  });
+
+  function showTab(tab: TabId): void {
+    activeTab = tab;
+    for (const t of tabs.querySelectorAll<HTMLButtonElement>('.tab')) {
+      t.classList.toggle('active', t.dataset['tab'] === tab);
+    }
+    if (!lastResult) {
+      panel.replaceChildren();
+      return;
+    }
+    panel.replaceChildren(renderPanel(tab, lastResult));
+  }
+
+  function renderPanel(tab: TabId, result: SolveResultDto): Node {
+    switch (tab) {
+      case 'summary':
+        return renderSummary(result);
+      case 'buses':
+        return renderBuses(result.buses);
+      case 'branches':
+        return renderBranches(result.branches);
+      case 'generators':
+        return renderGenerators(result.generators);
+      case 'violations':
+        return renderViolations(result.violations);
+    }
+  }
+
+  function clearErrors(): void {
     errors.hidden = true;
     errors.innerHTML = '';
   }
 
+  function focusRow(rowId: string): void {
+    const row = panel.querySelector<HTMLTableRowElement>(`#${rowId}`);
+    if (!row) return;
+    for (const tr of panel.querySelectorAll('tr.selected')) tr.classList.remove('selected');
+    row.classList.add('selected');
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
   return {
-    setStatus(message: string, kind: 'muted' | 'ok' | 'error' = 'muted') {
+    setStatus(message, kind = 'muted') {
       status.className = `status ${kind}`;
       status.textContent = message;
     },
-    showSolve(result: SolveResultDto) {
+    showSolve(result) {
       clearErrors();
-      summary.hidden = false;
-      summary.textContent = formatSummary(result);
+      lastResult = result;
+      tabs.hidden = false;
+      panel.hidden = false;
+      violationsTab.hidden = result.violations.length === 0;
+      violationsTab.textContent =
+        result.violations.length > 0 ? `Violations (${result.violations.length})` : 'Violations';
+      // Snap back to Summary on every fresh solve — the previous selection
+      // is rarely the row the user wants to see first.
+      showTab('summary');
     },
-    showValidation(result: ValidationResultDto) {
-      summary.hidden = true;
+    showValidation(result) {
+      lastResult = null;
+      tabs.hidden = true;
+      panel.hidden = true;
+      panel.replaceChildren();
       errors.hidden = false;
       errors.innerHTML = '';
       for (const err of result.errors) {
@@ -39,33 +123,171 @@ export function mountResults(container: HTMLElement) {
       }
     },
     clear() {
-      summary.hidden = true;
+      lastResult = null;
       clearErrors();
+      tabs.hidden = true;
+      panel.hidden = true;
+      panel.replaceChildren();
+    },
+    selectBus(busId) {
+      if (!lastResult) return;
+      if (activeTab !== 'buses') showTab('buses');
+      focusRow(`bus-${busId}`);
+    },
+    selectBranch(branchIndex) {
+      if (!lastResult) return;
+      if (activeTab !== 'branches') showTab('branches');
+      focusRow(`brn-${branchIndex}`);
+    },
+    clearSelection() {
+      for (const tr of panel.querySelectorAll('tr.selected')) tr.classList.remove('selected');
     },
   };
 }
 
-function formatSummary(r: SolveResultDto): string {
+// ── Renderers ───────────────────────────────────────────────────────────────
+
+function renderSummary(r: SolveResultDto): Node {
   const lines: string[] = [];
   lines.push(`mode             ${r.mode}`);
   lines.push(`converged        ${r.converged}`);
-  lines.push(`iterations       ${r.iterations}` + (r.outerIterations > 0 ? ` (${r.outerIterations} outer)` : ''));
+  lines.push(
+    `iterations       ${r.iterations}` +
+      (r.outerIterations > 0 ? ` (${r.outerIterations} outer)` : ''),
+  );
   lines.push(`max mismatch     ${r.maxMismatch.toExponential(3)} pu`);
   if (r.lambda !== null) lines.push(`lambda           ${r.lambda.toFixed(4)} pu`);
 
   if (r.balance) {
     const b = r.balance;
     lines.push('');
-    lines.push(`gen total        ${b.totalGenerationMw.toFixed(2)} MW   ${b.totalGenerationMvar.toFixed(2)} MVAr`);
-    lines.push(`load total       ${b.totalLoadMw.toFixed(2)} MW   ${b.totalLoadMvar.toFixed(2)} MVAr`);
-    lines.push(`losses           ${b.totalLossesMw.toFixed(2)} MW   ${b.totalLossesMvar.toFixed(2)} MVAr  (${b.lossPct.toFixed(2)}%)`);
-    if (b.totalShuntMvar !== 0) lines.push(`shunt            ${b.totalShuntMvar.toFixed(2)} MVAr`);
+    lines.push(`gen total        ${fmt(b.totalGenerationMw)} MW   ${fmt(b.totalGenerationMvar)} MVAr`);
+    lines.push(`load total       ${fmt(b.totalLoadMw)} MW   ${fmt(b.totalLoadMvar)} MVAr`);
+    lines.push(
+      `losses           ${fmt(b.totalLossesMw)} MW   ${fmt(b.totalLossesMvar)} MVAr  (${b.lossPct.toFixed(2)}%)`,
+    );
+    if (b.totalShuntMvar !== 0) lines.push(`shunt            ${fmt(b.totalShuntMvar)} MVAr`);
   }
 
-  if (r.violations.length > 0) {
-    lines.push('');
-    lines.push(`voltage violations: ${r.violations.length}`);
-  }
+  const pre = document.createElement('pre');
+  pre.className = 'summary';
+  pre.textContent = lines.join('\n');
+  return pre;
+}
 
-  return lines.join('\n');
+function renderBuses(buses: SolvedBusDto[]): Node {
+  return buildTable(
+    ['Bus', 'Vm (pu)', 'Va (°)', 'Pg (MW)', 'Qg (MVAr)', 'Pd (MW)', 'Qd (MVAr)'],
+    buses.map((b) => ({
+      id: `bus-${b.busId}`,
+      cells: [
+        String(b.busId),
+        fmtOpt(b.vm, 4),
+        b.va.toFixed(2),
+        fmt(b.pg),
+        fmtOpt(b.qg),
+        fmt(b.pd),
+        fmtOpt(b.qd),
+      ],
+    })),
+  );
+}
+
+function renderBranches(branches: SolvedBranchDto[]): Node {
+  return buildTable(
+    ['#', 'From → To', 'Pij (MW)', 'Qij (MVAr)', 'Loss (MW)', 'Loading %'],
+    branches.map((br) => ({
+      id: `brn-${br.branchIndex}`,
+      cells: [
+        String(br.branchIndex),
+        `${br.fromBusId} → ${br.toBusId}`,
+        fmt(br.pij),
+        fmtOpt(br.qij),
+        fmtOpt(br.lossMw, 3),
+        loadingCell(br.loadingPct),
+      ],
+    })),
+  );
+}
+
+function renderGenerators(gens: SolvedGeneratorDto[]): Node {
+  return buildTable(
+    ['#', 'Bus', 'Pg (MW)', 'Qg (MVAr)', 'Limit'],
+    gens.map((g) => ({
+      id: `gen-${g.index}`,
+      cells: [
+        String(g.index),
+        String(g.busId),
+        fmt(g.pg),
+        fmtOpt(g.qg),
+        g.isAtQmax ? 'Qmax' : g.isAtQmin ? 'Qmin' : '',
+      ],
+    })),
+  );
+}
+
+function renderViolations(violations: VoltageViolationDto[]): Node {
+  return buildTable(
+    ['Bus', 'Vm (pu)', 'Vm (kV)', 'Type', 'Bound (pu)'],
+    violations.map((v) => ({
+      id: `vio-${v.busId}`,
+      cells: [
+        String(v.busId),
+        v.vm.toFixed(4),
+        v.vmKv.toFixed(2),
+        v.isOverVoltage ? 'over' : 'under',
+        (v.isOverVoltage ? v.vmax : v.vmin).toFixed(4),
+      ],
+    })),
+  );
+}
+
+// ── Table primitive ─────────────────────────────────────────────────────────
+
+interface TableRow {
+  id: string;
+  cells: (string | { text: string; cls?: string })[];
+}
+
+function buildTable(headers: string[], rows: TableRow[]): HTMLElement {
+  const table = document.createElement('table');
+  table.className = 'datatable';
+  const thead = table.createTHead();
+  const tr = thead.insertRow();
+  for (const h of headers) {
+    const th = document.createElement('th');
+    th.textContent = h;
+    tr.append(th);
+  }
+  const tbody = table.createTBody();
+  for (const row of rows) {
+    const r = tbody.insertRow();
+    r.id = row.id;
+    for (const cell of row.cells) {
+      const td = r.insertCell();
+      if (typeof cell === 'string') {
+        td.textContent = cell;
+      } else {
+        td.textContent = cell.text;
+        if (cell.cls) td.className = cell.cls;
+      }
+    }
+  }
+  return table;
+}
+
+// ── Cell formatters ─────────────────────────────────────────────────────────
+
+function fmt(n: number, decimals = 2): string {
+  return n.toFixed(decimals);
+}
+
+function fmtOpt(n: number | null | undefined, decimals = 2): string {
+  return n === null || n === undefined ? '—' : n.toFixed(decimals);
+}
+
+function loadingCell(pct: number | null): string | { text: string; cls: string } {
+  if (pct === null) return '—';
+  const cls = pct >= 90 ? 'cell-red' : pct >= 70 ? 'cell-amber' : 'cell-green';
+  return { text: pct.toFixed(1), cls };
 }

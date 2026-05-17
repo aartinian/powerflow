@@ -22,8 +22,18 @@ mainEl.append(diagramEl, resultsEl);
 app.append(sidebarEl, mainEl);
 
 const results = mountResults(resultsEl);
-const diagram = mountDiagram(diagramEl, () => {
-  // Selection wired to the results panel in a later commit; ignore for now.
+const diagram = mountDiagram(diagramEl, (selection) => {
+  switch (selection.kind) {
+    case 'bus':
+      results.selectBus(selection.busId);
+      break;
+    case 'branch':
+      results.selectBranch(selection.branchIndex);
+      break;
+    case 'none':
+      results.clearSelection();
+      break;
+  }
 });
 let lastResult: SolveResultDto | null = null;
 

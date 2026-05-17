@@ -100,6 +100,96 @@ body {
   padding: 0.85rem 1.1rem;
   border-top: 1px solid var(--border);
   background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin: 0.25rem 0 0;
+}
+
+.tabs .tab {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tabs .tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tabs .tab[hidden] {
+  display: none;
+}
+
+.tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+table.datatable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+table.datatable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0.3rem 0.6rem;
+  z-index: 1;
+}
+
+table.datatable thead th:nth-child(1),
+table.datatable tbody td:nth-child(1),
+table.datatable thead th:nth-child(2),
+table.datatable tbody td:nth-child(2) {
+  text-align: left;
+}
+
+table.datatable tbody td {
+  padding: 0.22rem 0.6rem;
+  text-align: right;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+table.datatable tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+table.datatable tbody tr.selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.cell-red {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.cell-amber {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.cell-green {
+  color: var(--ok);
 }
 
 .field {
