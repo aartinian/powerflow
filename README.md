@@ -76,6 +76,8 @@ Checks include: missing slack bus, broken bus references, network islands, inval
 ```
 PowerFlow/
 ├── PowerFlow.Core/    # Models, parser, solver, validator
+├── PowerFlow.Api/     # ASP.NET Core Minimal API (stateless compute)
+├── PowerFlow.Client/  # TypeScript + Vite SPA, served from the API
 ├── PowerFlow.Runner/  # Console entry point
 └── PowerFlow.Tests/   # xUnit tests (193 tests)
 ```
@@ -93,9 +95,15 @@ dotnet run --project PowerFlow.Runner
 
 **Web UI**
 ```bash
-dotnet run --project PowerFlow.Web
+# 1. Build the SPA into the API's wwwroot
+cd PowerFlow.Client && npm install && npm run build && cd ..
+
+# 2. Run the stateless API (serves the SPA + JSON endpoints)
+dotnet run --project PowerFlow.Api
 ```
-Open `http://localhost:5032`, upload any MATPOWER `.m` file, and click Solve.
+Open `http://localhost:5000`. Pick a bundled IEEE case or upload your own MATPOWER `.m` file, then click Solve.
+
+For client-side hot reload while iterating on the UI, run `npm run dev` from `PowerFlow.Client/` — Vite serves on `:5173` and proxies `/api` and `/healthz` to the API on `:5000`.
 
 **Console**
 ```bash

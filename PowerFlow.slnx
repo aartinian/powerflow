@@ -3,6 +3,5 @@
   <Project Path="PowerFlow.Api/PowerFlow.Api.csproj" />
   <Project Path="PowerFlow.Runner/PowerFlow.Runner.csproj" />
   <Project Path="PowerFlow.Tests/PowerFlow.Tests.csproj" />
-  <Project Path="PowerFlow.Web/PowerFlow.Web.csproj" />
   <Project Path="samples/PowerFlow.Samples.csproj" />
 </Solution>

@@ -14,9 +14,6 @@ primary_region = 'ams'
   ASPNETCORE_HTTPS_REDIRECTION = 'false'
   ASPNETCORE_URLS = 'http://+:8080'
 
-[[mounts]]
-  source = 'powerflow_data'
-  destination = '/data'
 
 [http_service]
   internal_port = 8080

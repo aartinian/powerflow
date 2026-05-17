@@ -1,66 +1,66 @@
 # syntax=docker/dockerfile:1
 #
-# PowerFlow.Web — production container for Fly.io.
+# PowerFlow.Api — production container for Fly.io.
 #
-# Multi-stage build:
-#   1. Pull the .NET 10 SDK, restore Web + Core (Tests/Runner/Samples skipped).
-#   2. Publish PowerFlow.Web against the ASP.NET runtime image.
-#
-# The split keeps the final image small (~250 MB vs ~1 GB for the SDK image)
-# and lets Docker cache `dotnet restore` until a *.csproj actually changes.
+# Three stages:
+#   1. Build the Vite SPA, output to PowerFlow.Api/wwwroot.
+#   2. Restore + publish PowerFlow.Api against the ASP.NET runtime image.
+#      The wwwroot from stage 1 is copied in before publish so the SPA
+#      assets ride along into the final image.
+#   3. Slim runtime image — only the publish output is copied across.
 
-# ─── Build stage ───────────────────────────────────────────────────
+# ─── Stage 1: SPA bundle ───────────────────────────────────────────
+FROM node:20-alpine AS spa
+WORKDIR /src
+
+# Lockfile-only copy first so `npm ci` is cache-friendly. The cache layer
+# survives any source change inside PowerFlow.Client.
+COPY PowerFlow.Client/package.json PowerFlow.Client/package-lock.json PowerFlow.Client/
+RUN cd PowerFlow.Client && npm ci
+
+COPY PowerFlow.Client/ PowerFlow.Client/
+
+# vite.config.ts writes to ../PowerFlow.Api/wwwroot — preserved as-is so
+# local and CI builds use the same output path. We just need the parent
+# directory to exist inside the spa stage.
+RUN mkdir -p PowerFlow.Api && \
+    cd PowerFlow.Client && npm run build
+
+# ─── Stage 2: .NET publish ─────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy only project files first so `restore` is cache-friendly. Layer is
-# only invalidated when one of these *.csproj files changes — not when
-# any source file under the project changes.
+# Project files first for restore-cache friendliness.
 COPY PowerFlow.Core/PowerFlow.Core.csproj  PowerFlow.Core/
-COPY PowerFlow.Web/PowerFlow.Web.csproj    PowerFlow.Web/
+COPY PowerFlow.Api/PowerFlow.Api.csproj    PowerFlow.Api/
 
-# Restore from the Web project; transitively pulls Core. Tests, Runner,
-# and Samples are deliberately not copied — they are not part of the
-# deployable surface and would slow the build with extra restore work.
-RUN dotnet restore PowerFlow.Web/PowerFlow.Web.csproj
+RUN dotnet restore PowerFlow.Api/PowerFlow.Api.csproj
 
-# Now copy source. This layer is invalidated on every code change, but
-# `restore` above stays cached.
-COPY PowerFlow.Core/  PowerFlow.Core/
-COPY PowerFlow.Web/   PowerFlow.Web/
+# Source + SPA bundle.
+COPY PowerFlow.Core/ PowerFlow.Core/
+COPY PowerFlow.Api/  PowerFlow.Api/
+COPY --from=spa /src/PowerFlow.Api/wwwroot/ PowerFlow.Api/wwwroot/
 
-# Publish for production. UseAppHost=false skips the platform-specific
-# launcher executable since we run via `dotnet PowerFlow.Web.dll` instead.
-#
-# NOTE: do NOT add --no-restore here. Blazor's static-web-asset targets
-# (the ones that copy _framework/blazor.web.js into the publish output)
-# require publish to run its own restore phase to wire up MSBuild item
-# groups correctly. --no-restore skips that wiring and the _framework/
-# directory is silently omitted, making the deployed app load a blank
-# page (blazor.web.js 404 → no Blazor circuit → no interactivity).
-# The earlier `dotnet restore` layer already populated the NuGet global
-# cache, so this restore is a fast cache-hit, not a network download.
-RUN dotnet publish PowerFlow.Web/PowerFlow.Web.csproj \
+# UseAppHost=false skips the platform-specific launcher; we run with
+# `dotnet PowerFlow.Api.dll` directly.
+RUN dotnet publish PowerFlow.Api/PowerFlow.Api.csproj \
     --configuration Release \
     --output /app/publish \
     /p:UseAppHost=false && \
-    # Guard: fail loudly if the framework JS is still missing rather than
-    # silently shipping a broken image.
-    test -f /app/publish/wwwroot/_framework/blazor.web.js || \
-        { echo "ERROR: blazor.web.js missing from publish output"; exit 1; }
+    # Guard: fail loudly if the SPA bundle is missing rather than ship
+    # an API with no UI on top.
+    test -f /app/publish/wwwroot/index.html || \
+        { echo "ERROR: SPA bundle missing from publish output"; exit 1; }
 
-# ─── Runtime stage ─────────────────────────────────────────────────
+# ─── Stage 3: Runtime ──────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# The aspnet runtime image already provides a non-root `app` user (UID
-# 1000) since .NET 8 — recreating it collides with `useradd: UID already
-# exists` (exit 9). Just chown the copy and switch users.
+# The aspnet runtime image ships with a non-root `app` user (UID 1000)
+# since .NET 8 — just chown the copy and switch.
 COPY --chown=app:app --from=build /app/publish ./
 USER app
 
-# Listen on the port Fly's edge proxy forwards to (matches fly.toml's
-# internal_port). Production environment turns on production logging.
 ENV ASPNETCORE_URLS=http://+:8080 \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true \
@@ -68,4 +68,4 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "PowerFlow.Web.dll"]
+ENTRYPOINT ["dotnet", "PowerFlow.Api.dll"]
