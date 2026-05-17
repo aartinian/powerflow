@@ -33,6 +33,7 @@ api.MapCasesEndpoints();
 api.MapValidateEndpoints();
 api.MapSolveStreamEndpoints(); // register before /api/solve so the more-specific route wins
 api.MapSolveEndpoints();
+api.MapContingencyEndpoints();
 
 app.MapFallbackToFile("index.html");
 
