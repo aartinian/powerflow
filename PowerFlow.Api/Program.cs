@@ -31,6 +31,7 @@ app.MapGet("/healthz", () => Results.Ok("ok")).AllowAnonymous();
 var api = app.MapGroup("/api");
 api.MapCasesEndpoints();
 api.MapValidateEndpoints();
+api.MapSolveStreamEndpoints(); // register before /api/solve so the more-specific route wins
 api.MapSolveEndpoints();
 
 app.MapFallbackToFile("index.html");
