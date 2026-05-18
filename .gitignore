@@ -429,3 +429,4 @@ FodyWeavers.xsd
 .DS_Store
 .cursor/
 .claude/
+.claude/launch.json

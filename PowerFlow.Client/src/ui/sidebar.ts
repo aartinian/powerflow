@@ -297,13 +297,13 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
       solveBusy = busy;
       solveBtn.disabled = false;
       solveBtn.textContent = busy ? 'Cancel' : 'Solve';
-      solveBtn.classList.toggle('danger', busy);
+      solveBtn.classList.toggle('cancel', busy);
     },
     setContingencyBusy(busy: boolean) {
       ctgBusy = busy;
       ctgBtn.disabled = false;
       ctgBtn.textContent = busy ? 'Cancel' : 'Run N-1 sweep';
-      ctgBtn.classList.toggle('danger', busy);
+      ctgBtn.classList.toggle('cancel', busy);
     },
     setBaseLoad(totalMw: number | null) {
       baseLoadMw = totalMw;

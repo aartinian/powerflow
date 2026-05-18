@@ -6,6 +6,12 @@
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "PowerFlow.Api/PowerFlow.Api.csproj", "--urls", "http://localhost:5050"],
       "port": 5050
+    },
+    {
+      "name": "client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "PowerFlow.Client"],
+      "port": 5173
     }
   ]
 }

@@ -1,17 +1,31 @@
 :root,
 :root[data-theme="light"] {
-  --bg: #fafafa;
+  --bg: #f4f5f7;
   --panel: #ffffff;
-  --panel-2: #f4f4f6;
-  --border: #d6d6d8;
+  --panel-2: #eaeaef;
+  --border: #c6c6cb;
   --text: #1c1c1e;
-  --muted: #6b6b70;
+  --muted: #5e5e67;
   --accent: #0a66c2;
   --accent-fg: #ffffff;
+  /* primary action (Solve, Create) — deeper than --accent so it reads as "do" */
+  --action: #2563eb;
+  --action-fg: #ffffff;
   --error: #b00020;
   --ok: #1d7d4e;
   --warn: #b35c00;
+  /* stale is semantically distinct from warn even though colour matches for now */
+  --stale: #9a5800;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.07);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.12);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* type scale — 6 stops, rough major-third ratio */
+  --fs-2xs: 0.68rem;
+  --fs-xs: 0.78rem;
+  --fs-sm: 0.85rem;
+  --fs-base: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.2rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,9 +38,20 @@
     --muted: #8d8d92;
     --accent: #4ea3ff;
     --accent-fg: #0b1d35;
+    --action: #3b82f6;
+    --action-fg: #ffffff;
     --error: #ff6b7a;
     --ok: #6fcf97;
     --warn: #ffa657;
+    --stale: #ffa657;
+    --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55);
+    --fs-2xs: 0.68rem;
+    --fs-xs: 0.78rem;
+    --fs-sm: 0.85rem;
+    --fs-base: 0.875rem;
+    --fs-md: 1rem;
+    --fs-lg: 1.2rem;
   }
 }
 
@@ -39,9 +64,20 @@
   --muted: #8d8d92;
   --accent: #4ea3ff;
   --accent-fg: #0b1d35;
+  --action: #3b82f6;
+  --action-fg: #ffffff;
   --error: #ff6b7a;
   --ok: #6fcf97;
   --warn: #ffa657;
+  --stale: #ffa657;
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --fs-2xs: 0.68rem;
+  --fs-xs: 0.78rem;
+  --fs-sm: 0.85rem;
+  --fs-base: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.2rem;
 }
 
 * {
@@ -81,6 +117,9 @@ a:hover {
   height: 48px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 5;
 }
 
 .brand {
@@ -89,14 +128,17 @@ a:hover {
   gap: 0.55rem;
 }
 .brand-mark {
-  font-size: 1.1rem;
+  font-size: var(--fs-md);
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 .brand-name {
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 .badge {
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   color: var(--muted);
   background: var(--panel-2);
   padding: 0.1rem 0.45rem;
@@ -137,13 +179,14 @@ a:hover {
   border-right: 1px solid var(--border);
   background: var(--panel);
   overflow-y: auto;
+  box-shadow: var(--shadow-sm);
 }
 
 #sidebar h2 {
   margin: 0 0 0.5rem;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--muted);
 }
 
@@ -170,7 +213,7 @@ a:hover {
 #kpi-bar.stale .kpi-value {
   opacity: 0.45;
   text-decoration: line-through;
-  text-decoration-color: var(--warn);
+  text-decoration-color: var(--stale);
   text-decoration-thickness: 1px;
 }
 #kpi-bar.stale::after {
@@ -178,11 +221,11 @@ a:hover {
   position: absolute;
   top: 0.35rem;
   right: 0.7rem;
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   letter-spacing: 0.08em;
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 18%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+  color: var(--stale);
+  background: color-mix(in srgb, var(--stale) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--stale) 50%, transparent);
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
 }
@@ -195,7 +238,7 @@ a:hover {
   border-right: 0;
 }
 .kpi-value {
-  font-size: 1.25rem;
+  font-size: var(--fs-lg);
   font-weight: 600;
   font-family: var(--mono);
 }
@@ -206,21 +249,23 @@ a:hover {
   color: var(--error);
 }
 .kpi-label {
-  font-size: 0.65rem;
+  font-size: var(--fs-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   color: var(--muted);
   margin-top: 0.15rem;
 }
 
 .bus-pill {
   display: inline-block;
-  font-size: 0.85rem;
+  font-size: var(--fs-xs);
   padding: 0.05rem 0.45rem;
   border-radius: 4px;
-  margin-right: 0.25rem;
+  margin-right: 0.2rem;
   border: 1px solid var(--border);
   font-family: var(--mono);
+  min-width: 3.4rem;
+  text-align: center;
 }
 .bus-pill.bus-sl {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -376,7 +421,7 @@ a:hover {
   margin-bottom: 0.55rem;
 }
 .field label {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
 }
 .field-row {
@@ -408,9 +453,9 @@ input[type="text"] {
 
 button {
   font: inherit;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: var(--accent-fg);
+  border: 1px solid var(--action);
+  background: var(--action);
+  color: var(--action-fg);
   padding: 0.4rem 0.85rem;
   border-radius: 4px;
   cursor: pointer;
@@ -421,12 +466,25 @@ button:disabled {
 }
 button.secondary {
   background: transparent;
+  border-color: var(--accent);
   color: var(--accent);
+}
+button.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+button.cancel {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+button.cancel:hover:not(:disabled) {
+  background: var(--panel-2);
+  border-color: var(--muted);
 }
 button.danger {
   background: var(--error);
   border-color: var(--error);
-  color: var(--accent-fg);
+  color: #fff;
 }
 button.danger-text {
   background: transparent;
@@ -499,7 +557,7 @@ button.mini {
   align-self: flex-start;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -515,8 +573,8 @@ button.mini {
   color: var(--error);
 }
 .result-badge.warn {
-  background: color-mix(in srgb, var(--warn) 20%, transparent);
-  color: var(--warn);
+  background: color-mix(in srgb, var(--stale) 20%, transparent);
+  color: var(--stale);
 }
 #result-block.stale .result-iter,
 #result-block.stale .result-mismatch {
@@ -561,10 +619,10 @@ button.mini {
 }
 .editor-title {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--fs-md);
 }
 .editor-sub {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   font-family: var(--mono);
 }
@@ -575,7 +633,7 @@ button.mini {
   align-items: center;
 }
 .editor-grid label {
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -763,7 +821,7 @@ table.datatable {
   width: 100%;
   border-collapse: collapse;
   font-family: var(--mono);
-  font-size: 0.8rem;
+  font-size: var(--fs-xs);
 }
 table.datatable thead th {
   position: sticky;
