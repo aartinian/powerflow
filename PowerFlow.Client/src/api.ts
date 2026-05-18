@@ -51,11 +51,50 @@ export async function solve(
 
 // ── Contingency ───────────────────────────────────────────────────────────
 
-export async function contingency(
+export type ContingencyStreamEvent =
+  | { type: 'row'; row: ContingencyResultDto }
+  | { type: 'complete'; total: number };
+
+// Streams N-1 contingency results as SSE — one `row` event per branch trip,
+// emitted by the server as each parallel solve completes, and one final
+// `complete` event when the sweep finishes. Lets the UI render rows as
+// they arrive instead of waiting for the entire sweep.
+export async function contingencyStream(
   request: SolveRequestDto,
+  onEvent: (event: ContingencyStreamEvent) => void,
   signal?: AbortSignal,
-): Promise<ContingencyResultDto[]> {
-  return postJsonExpectingValidation<ContingencyResultDto[]>('/api/contingency', request, signal);
+): Promise<void> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(request),
+  };
+  if (signal) init.signal = signal;
+  const response = await fetch('/api/contingency', init);
+
+  if (response.status === 422) {
+    const body = (await response.json()) as ValidationResultDto;
+    throw new ApiValidationError(body);
+  }
+  if (!response.ok || !response.body) {
+    throw new Error(`contingency failed: ${response.status} ${response.statusText}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      const payload = extractDataPayload(frame);
+      if (payload !== null) onEvent(JSON.parse(payload) as ContingencyStreamEvent);
+    }
+  }
 }
 
 // ── Solve stream (SSE) ────────────────────────────────────────────────────

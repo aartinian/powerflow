@@ -431,9 +431,20 @@ function renderContingency(
   results: ContingencyResultDto[],
   onRowClick: (branchIndex: number) => void,
 ): Node {
+  // Server now streams results unsorted (one event per branch as the parallel
+  // solver finishes it), so the client sorts on render — same severity order
+  // the legacy non-streaming endpoint used to apply on the way out.
+  const sorted = [...results].sort((a, b) => {
+    if (a.converged !== b.converged) return Number(!a.converged) - Number(!b.converged);
+    if (a.branchOverloadCount !== b.branchOverloadCount)
+      return b.branchOverloadCount - a.branchOverloadCount;
+    if (a.voltageViolationCount !== b.voltageViolationCount)
+      return b.voltageViolationCount - a.voltageViolationCount;
+    return (b.maxLoadingPct ?? 0) - (a.maxLoadingPct ?? 0);
+  });
   const table = buildTable(
     ['#', 'From → To', 'Converged', 'Max Loading %', 'Overloads', 'V-Viol'],
-    results.map((c) => ({
+    sorted.map((c) => ({
       id: `ctg-${c.branchIndex}`,
       cells: [
         String(c.branchIndex),

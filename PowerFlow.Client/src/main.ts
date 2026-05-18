@@ -1,7 +1,7 @@
 import './style.css';
 import {
   ApiValidationError,
-  contingency,
+  contingencyStream,
   listCases,
   loadCase,
   parseCase,
@@ -9,6 +9,7 @@ import {
   solveStream,
   validate,
 } from './api.js';
+import type { ContingencyResultDto } from './types.js';
 import {
   addBranch,
   addBus,
@@ -373,26 +374,48 @@ async function handleContingency(options: SolveOptionsDto): Promise<void> {
   sidebar.setContingencyBusy(true);
   const inSvc = net.branches.filter((b) => b.isInService).length;
   results.setStatus(`Running N-1 sweep over ${inSvc} branch(es)…`);
+
+  // Accumulate rows as they arrive; render after each row so the user sees
+  // progress instead of waiting for the entire sweep to finish.
+  const rows: ContingencyResultDto[] = [];
+  let total = inSvc;
   try {
-    const rs = await contingency({ network: net, options }, controller.signal);
-    results.showContingency(rs);
-    const worst = rs[0];
+    await contingencyStream(
+      { network: net, options },
+      (event) => {
+        if (event.type === 'row') {
+          rows.push(event.row);
+          results.showContingency([...rows]);
+          results.setStatus(`Sweep in progress: ${rows.length} / ${total} branches…`);
+        } else if (event.type === 'complete') {
+          total = event.total;
+        }
+      },
+      controller.signal,
+    );
+    results.showContingency([...rows]);
+    const worst = [...rows].sort((a, b) =>
+      a.converged === b.converged
+        ? (b.maxLoadingPct ?? 0) - (a.maxLoadingPct ?? 0)
+        : Number(!a.converged) - Number(!b.converged),
+    )[0];
     if (!worst) {
       results.setStatus('Sweep returned no contingencies.', 'muted');
     } else if (!worst.converged) {
       results.setStatus(
-        `Sweep complete: ${rs.filter((r) => !r.converged).length} contingency(s) diverged — most severe at top.`,
+        `Sweep complete: ${rows.filter((r) => !r.converged).length} contingency(s) diverged — most severe at top.`,
         'error',
       );
     } else {
       results.setStatus(
-        `Sweep complete: ${rs.length} contingencies, worst max loading ${worst.maxLoadingPct?.toFixed(1) ?? '—'}%.`,
+        `Sweep complete: ${rows.length} contingencies, worst max loading ${worst.maxLoadingPct?.toFixed(1) ?? '—'}%.`,
         'ok',
       );
     }
   } catch (err) {
     if (controller.signal.aborted) {
-      results.setStatus('Sweep cancelled.', 'muted');
+      results.setStatus(`Sweep cancelled at ${rows.length} / ${total}.`, 'muted');
+      if (rows.length > 0) results.showContingency([...rows]);
     } else if (err instanceof ApiValidationError) {
       results.showValidation(err.result);
       results.setStatus(`Validation failed (${err.result.errors.length} error(s))`, 'error');

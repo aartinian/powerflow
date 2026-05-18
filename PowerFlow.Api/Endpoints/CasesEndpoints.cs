@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using PowerFlow.Api.Dtos;
 using PowerFlow.Api.Mapping;
@@ -19,6 +20,12 @@ internal static class CasesEndpoints
         new("case300", "IEEE 300-bus", 300, 411, 69),
     ];
 
+    // Memoise parsed bundled cases. Embedded resources are immutable for the
+    // lifetime of the process — no invalidation needed. case300 is the
+    // expensive parse (~5 ms cold) and is hit on every page load that opens
+    // a case picker; without caching the same work runs per request.
+    private static readonly ConcurrentDictionary<string, NetworkDto> ParsedCache = new();
+
     internal static RouteGroupBuilder MapCasesEndpoints(this RouteGroupBuilder group)
     {
         group.MapGet("cases", () => Results.Ok(BundledCases));
@@ -31,6 +38,9 @@ internal static class CasesEndpoints
                 if (meta is null)
                     return Results.NotFound();
 
+                if (ParsedCache.TryGetValue(id, out var cached))
+                    return Results.Ok(cached);
+
                 var content = await ReadEmbeddedCaseAsync(id);
                 if (content is null)
                     return Results.NotFound();
@@ -38,7 +48,9 @@ internal static class CasesEndpoints
                 try
                 {
                     var network = MatpowerParser.Parse(content);
-                    return Results.Ok(network.ToDto(name: meta.Label));
+                    var dto = network.ToDto(name: meta.Label);
+                    ParsedCache.TryAdd(id, dto);
+                    return Results.Ok(dto);
                 }
                 catch (FormatException ex)
                 {

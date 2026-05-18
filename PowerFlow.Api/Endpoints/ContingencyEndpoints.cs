@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.RateLimiting;
 using PowerFlow.Api.Dtos;
@@ -9,16 +11,27 @@ namespace PowerFlow.Api.Endpoints;
 
 internal static class ContingencyEndpoints
 {
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     internal static RouteGroupBuilder MapContingencyEndpoints(this RouteGroupBuilder group)
     {
-        // POST /api/contingency — N-1 branch contingency sweep.
-        // Trips each in-service branch in turn and returns a ranked list of
-        // post-contingency results, most severe first.
+        // POST /api/contingency — N-1 branch contingency sweep, streamed as SSE.
+        //
+        // Each `row` event carries one contingency result as it completes — the
+        // server doesn't wait to sort the full list before emitting. A final
+        // `complete` event closes the stream. The client accumulates rows and
+        // sorts on display, so the user sees progress on every solver finish
+        // instead of a blank screen for the whole sweep.
         group
             .MapPost(
                 "contingency",
-                async (SolveRequestDto request) =>
+                async (HttpContext context, SolveRequestDto request) =>
                 {
+                    var ct = context.RequestAborted;
+
                     PowerFlow.Core.Models.PowerNetwork baseNetwork;
                     try
                     {
@@ -31,55 +44,95 @@ internal static class ContingencyEndpoints
                             ex.Message,
                             "Error"
                         );
-                        return Results.UnprocessableEntity(
-                            new ValidationResultDto(false, [constructionError])
+                        context.Response.StatusCode = 422;
+                        await context.Response.WriteAsJsonAsync(
+                            new ValidationResultDto(false, [constructionError]),
+                            JsonOpts,
+                            ct
                         );
+                        return;
                     }
 
                     var validation = NetworkValidator.Validate(baseNetwork);
                     if (!validation.IsValid)
-                        return Results.UnprocessableEntity(validation.ToDto());
+                    {
+                        context.Response.StatusCode = 422;
+                        await context.Response.WriteAsJsonAsync(validation.ToDto(), JsonOpts, ct);
+                        return;
+                    }
 
-                    // Collect the in-service branch indices once — these are the
-                    // contingencies we will screen.
+                    // Switch to SSE before any solver work so the client can
+                    // open its EventSource reader immediately.
+                    context.Response.ContentType = "text/event-stream";
+                    context.Response.Headers.CacheControl = "no-cache";
+                    context.Response.Headers["X-Accel-Buffering"] = "no";
+
                     var inSvcIndices = request
                         .Network.Branches.Select((b, i) => (Branch: b, Index: i))
                         .Where(x => x.Branch.IsInService)
                         .Select(x => x.Index)
                         .ToArray();
 
-                    var results = new ContingencyResultDto[inSvcIndices.Length];
-
-                    await Task.Run(() =>
-                        Parallel.For(
-                            0,
-                            inSvcIndices.Length,
-                            new ParallelOptions
-                            {
-                                MaxDegreeOfParallelism = Environment.ProcessorCount,
-                            },
-                            i =>
-                            {
-                                var branchIdx = inSvcIndices[i];
-                                results[i] = SolveContingency(
-                                    request.Network,
-                                    branchIdx,
-                                    request.Options
-                                );
-                            }
-                        )
+                    // Single-reader channel: many worker threads write per-row
+                    // JSON, the response writer drains them in order. Avoids
+                    // serialising HttpResponse access from Parallel.For.
+                    var channel = Channel.CreateUnbounded<string>(
+                        new UnboundedChannelOptions { SingleReader = true }
                     );
 
-                    // Sort: non-converged first, then by overload count desc,
-                    // then by max loading pct desc. Most severe contingency at index 0.
-                    var sorted = results
-                        .OrderByDescending(r => !r.Converged)
-                        .ThenByDescending(r => r.BranchOverloadCount)
-                        .ThenByDescending(r => r.VoltageViolationCount)
-                        .ThenByDescending(r => r.MaxLoadingPct ?? 0)
-                        .ToArray();
+                    var producer = Task.Run(
+                        async () =>
+                        {
+                            try
+                            {
+                                await Task.Run(() =>
+                                    Parallel.For(
+                                        0,
+                                        inSvcIndices.Length,
+                                        new ParallelOptions
+                                        {
+                                            MaxDegreeOfParallelism = Environment.ProcessorCount,
+                                            CancellationToken = ct,
+                                        },
+                                        i =>
+                                        {
+                                            var row = SolveContingency(
+                                                request.Network,
+                                                inSvcIndices[i],
+                                                request.Options
+                                            );
+                                            var json = JsonSerializer.Serialize(
+                                                new { type = "row", row },
+                                                JsonOpts
+                                            );
+                                            channel.Writer.TryWrite(json);
+                                        }
+                                    )
+                                );
+                                var done = JsonSerializer.Serialize(
+                                    new { type = "complete", total = inSvcIndices.Length },
+                                    JsonOpts
+                                );
+                                channel.Writer.TryWrite(done);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                // client disconnected — just stop writing
+                            }
+                            finally
+                            {
+                                channel.Writer.Complete();
+                            }
+                        },
+                        ct
+                    );
 
-                    return Results.Ok(sorted);
+                    await foreach (var line in channel.Reader.ReadAllAsync(ct))
+                    {
+                        await context.Response.WriteAsync($"data: {line}\n\n", ct);
+                        await context.Response.Body.FlushAsync(ct);
+                    }
+                    await producer.ConfigureAwait(false);
                 }
             )
             .RequireRateLimiting("contingency")
@@ -115,7 +168,6 @@ internal static class ContingencyEndpoints
         }
         catch
         {
-            // Solver threw (singular matrix etc.) — treat as non-converged.
             return new ContingencyResultDto(
                 BranchIndex: branchIndex,
                 FromBusId: tripped.FromBusId,
