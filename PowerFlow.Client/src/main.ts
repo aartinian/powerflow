@@ -56,9 +56,18 @@ mainEl.id = 'main';
 const footerEl = document.createElement('footer');
 footerEl.id = 'footer';
 
-// Main pane: KPI bar / diagram (with fit+legend overlays) / editor / results
+// Main pane: KPI bar / solve strip / diagram (with fit+legend overlays) / editor / results
 const kpiEl = document.createElement('div');
 kpiEl.id = 'kpi-bar';
+const solveStripEl = document.createElement('div');
+solveStripEl.id = 'solve-strip';
+solveStripEl.hidden = true;
+solveStripEl.innerHTML = `
+  <span class="strip-badge" id="strip-badge"></span>
+  <span class="strip-detail" id="strip-detail"></span>
+`;
+const stripBadgeEl = solveStripEl.querySelector<HTMLElement>('#strip-badge')!;
+const stripDetailEl = solveStripEl.querySelector<HTMLElement>('#strip-detail')!;
 const diagramWrap = document.createElement('div');
 diagramWrap.id = 'diagram-wrap';
 const diagramEl = document.createElement('div');
@@ -90,7 +99,7 @@ const editorEl = document.createElement('div');
 editorEl.id = 'editor';
 const resultsEl = document.createElement('div');
 resultsEl.id = 'results-panel';
-mainEl.append(kpiEl, diagramWrap, editorEl, resultsEl);
+mainEl.append(kpiEl, solveStripEl, diagramWrap, editorEl, resultsEl);
 
 bodyEl.append(sidebarEl, mainEl);
 app.append(headerEl, bodyEl, footerEl);
@@ -232,9 +241,22 @@ const sidebar = mountSidebar(sidebarEl, {
   },
 });
 
+function showSolveStrip(r: SolveResultDto | null): void {
+  if (!r) {
+    solveStripEl.hidden = true;
+    return;
+  }
+  solveStripEl.hidden = false;
+  solveStripEl.classList.remove('stale');
+  stripBadgeEl.textContent = r.converged ? 'Converged' : 'Diverged';
+  stripBadgeEl.className = `strip-badge ${r.converged ? 'ok' : 'error'}`;
+  const iterLabel = r.mode === 'DC' ? 'DC' : `${r.iterations} iter`;
+  stripDetailEl.textContent = `${iterLabel} · max |F| ${r.maxMismatch.toExponential(2)} pu`;
+}
+
 function setStale(stale: boolean): void {
   kpi.setStale(stale);
-  sidebar.setStale(stale);
+  if (!solveStripEl.hidden) solveStripEl.classList.toggle('stale', stale);
 }
 
 network.subscribe((net, kind) => {
@@ -245,7 +267,7 @@ network.subscribe((net, kind) => {
     diagram.setNetwork(net);
     lastResult = null;
     editor.hide();
-    sidebar.showResult(null);
+    showSolveStrip(null);
     kpi.setResult(null);
     setStale(false);
   } else if (kind === 'topology' && net) {
@@ -334,7 +356,7 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
     diagram.setSolveResult(result);
     results.showSolve(result);
     kpi.setResult(result);
-    sidebar.showResult(result);
+    showSolveStrip(result);
     setStale(false);
     results.setStatus(
       result.converged

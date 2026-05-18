@@ -194,9 +194,29 @@ a:hover {
   margin-top: 1.25rem;
 }
 
+/* Solve is the primary action — give it a visual step up over the settings sections */
+#solve-section {
+  border-top: 2px solid var(--border);
+  padding-top: 1rem;
+  margin-top: 1.5rem !important;
+}
+#solve-section h2 {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* Solve and contingency buttons span the full sidebar width */
+#solve-btn,
+#ctg-btn {
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+}
+
 #main {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -231,7 +251,7 @@ a:hover {
 }
 
 .kpi {
-  padding: 0.7rem 1rem;
+  padding: 0.45rem 1rem;
   border-right: 1px solid var(--border);
 }
 .kpi:last-child {
@@ -289,6 +309,62 @@ a:hover {
 }
 .vm-edge.error {
   color: var(--error);
+}
+
+/* Explicit row placement so display:none siblings don't cause auto-flow
+   to skip tracks, pushing visible elements into the wrong rows. */
+#kpi-bar      { grid-row: 1; }
+#solve-strip  { grid-row: 2; }
+#diagram-wrap { grid-row: 3; }
+#editor       { grid-row: 4; }
+#results-panel { grid-row: 5; }
+
+/* ── Solve strip ────────────────────────────────────────────────────── */
+/* Slim bar between the KPI row and the diagram. Hidden until first solve. */
+#solve-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.28rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-xs);
+}
+#solve-strip[hidden] {
+  display: none;
+}
+#solve-strip.stale .strip-detail {
+  opacity: 0.5;
+  text-decoration: line-through;
+  text-decoration-color: var(--stale);
+}
+#solve-strip.stale::after {
+  content: 'stale';
+  font-size: var(--fs-2xs);
+  color: var(--stale);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-left: auto;
+}
+.strip-badge {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.strip-badge.ok {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+.strip-badge.error {
+  background: color-mix(in srgb, var(--error) 18%, transparent);
+  color: var(--error);
+}
+.strip-detail {
+  font-family: var(--mono);
+  color: var(--muted);
 }
 
 /* ── Diagram ────────────────────────────────────────────────────────── */
@@ -659,7 +735,7 @@ button.mini {
 .editor-actions {
   margin-top: 0.6rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 0.4rem;
 }
 
@@ -859,6 +935,11 @@ table.datatable tbody tr.selected {
 table.datatable.clickable tbody tr {
   cursor: pointer;
 }
+table.datatable.clickable tbody tr td:last-child::after {
+  content: ' ›';
+  color: var(--muted);
+  opacity: 0.5;
+}
 .cell-red {
   color: var(--error);
   font-weight: 600;
@@ -896,6 +977,7 @@ table.datatable.clickable tbody tr {
     grid-template-columns: repeat(3, 1fr);
   }
   .kpi {
+    padding: 0.4rem 0.85rem;
     border-bottom: 1px solid var(--border);
   }
   .kpi:nth-child(4),
@@ -906,9 +988,6 @@ table.datatable.clickable tbody tr {
   .kpi:nth-child(3),
   .kpi:nth-child(6) {
     border-right: 0;
-  }
-  .kpi-value {
-    font-size: 1.1rem;
   }
   .editor-grid {
     grid-template-columns: max-content 1fr max-content 1fr;
@@ -965,7 +1044,7 @@ table.datatable.clickable tbody tr {
     grid-template-columns: repeat(2, 1fr);
   }
   .kpi {
-    padding: 0.55rem 0.7rem;
+    padding: 0.38rem 0.6rem;
     border-bottom: 1px solid var(--border);
   }
   .kpi:nth-child(odd) {

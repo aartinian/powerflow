@@ -1,4 +1,4 @@
-import type { CaseMetaDto, SolveResultDto, SolveOptionsDto } from '../types.js';
+import type { CaseMetaDto, SolveOptionsDto } from '../types.js';
 
 export interface SidebarCallbacks {
   onLoadCase: (id: string) => void | Promise<void>;
@@ -87,6 +87,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
 
   // ── Solve options section ───────────────────────────────────────────────
   const solveSection = document.createElement('section');
+  solveSection.id = 'solve-section';
   solveSection.innerHTML = `
     <h2>Solve</h2>
     <div class="field">
@@ -138,22 +139,6 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     if (solveBusy) callbacks.onCancelSolve();
     else void callbacks.onSolve(readOptions());
   });
-
-  // ── Result block (post-solve summary) ───────────────────────────────────
-  const resultBlock = document.createElement('section');
-  resultBlock.id = 'result-block';
-  resultBlock.hidden = true;
-  resultBlock.innerHTML = `
-    <h2>Result</h2>
-    <div class="result-card">
-      <div class="result-badge" id="result-badge">—</div>
-      <div class="result-iter"><span id="result-iter">0</span><small>iterations</small></div>
-      <div class="result-mismatch" id="result-mismatch"></div>
-    </div>
-  `;
-  const resultBadge = resultBlock.querySelector<HTMLDivElement>('#result-badge')!;
-  const resultIter = resultBlock.querySelector<HTMLSpanElement>('#result-iter')!;
-  const resultMismatch = resultBlock.querySelector<HTMLDivElement>('#result-mismatch')!;
 
   // ── Contingency section ─────────────────────────────────────────────────
   const contingencySection = document.createElement('section');
@@ -246,7 +231,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     }
   });
 
-  container.append(caseSection, stressSection, solveSection, resultBlock, contingencySection, buildSection);
+  container.append(caseSection, stressSection, solveSection, contingencySection, buildSection);
 
   function readOptions(): SolveOptionsDto {
     const $ = <T extends Element>(s: string) => solveSection.querySelector<T>(s)!;
@@ -315,25 +300,6 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     },
     getLoadScale(): number {
       return scaleInput.valueAsNumber / 100;
-    },
-    showResult(r: SolveResultDto | null) {
-      if (!r) {
-        resultBlock.hidden = true;
-        return;
-      }
-      resultBlock.hidden = false;
-      resultBlock.classList.remove('stale');
-      resultBadge.textContent = r.converged ? 'Converged' : 'Diverged';
-      resultBadge.className = `result-badge ${r.converged ? 'ok' : 'error'}`;
-      resultIter.textContent = String(r.iterations);
-      resultMismatch.textContent = `max |F| ${r.maxMismatch.toExponential(2)} pu`;
-    },
-    setStale(stale: boolean) {
-      resultBlock.classList.toggle('stale', stale && !resultBlock.hidden);
-      if (stale && !resultBlock.hidden) {
-        resultBadge.textContent = 'Stale';
-        resultBadge.className = 'result-badge warn';
-      }
     },
   };
 }
