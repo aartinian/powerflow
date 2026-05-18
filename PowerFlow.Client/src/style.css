@@ -832,3 +832,133 @@ table.datatable.clickable tbody tr {
   border-radius: 999px;
   font-size: 0.7rem;
 }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+/* Tablet: pinch the sidebar and wrap the KPI bar to 3×2 so each cell
+   stays readable instead of getting bisected by long values. */
+@media (max-width: 1099px) {
+  #app-body {
+    grid-template-columns: 240px 1fr;
+  }
+  #kpi-bar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .kpi {
+    border-bottom: 1px solid var(--border);
+  }
+  .kpi:nth-child(4),
+  .kpi:nth-child(5),
+  .kpi:nth-child(6) {
+    border-bottom: 0;
+  }
+  .kpi:nth-child(3),
+  .kpi:nth-child(6) {
+    border-right: 0;
+  }
+  .kpi-value {
+    font-size: 1.1rem;
+  }
+  .editor-grid {
+    grid-template-columns: max-content 1fr max-content 1fr;
+  }
+}
+
+/* Phone / narrow: stack sidebar on top of main, single column, smaller
+   padding and KPI font. Diagram keeps a 350 px minimum so the network
+   stays interactive even in portrait. The whole body scrolls — we don't
+   try to give the sidebar its own scroll area, because nested scrollers
+   inside a CSS grid resolve to min-content and collapse the panel. */
+@media (max-width: 767px) {
+  html,
+  body {
+    overflow: auto;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  #header {
+    padding: 0 0.75rem;
+    height: 44px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #app-body {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+  #sidebar {
+    padding: 0.75rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+  #sidebar section + section {
+    margin-top: 1rem;
+  }
+  #main {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+  #diagram-wrap {
+    height: 60vh;
+    min-height: 350px;
+  }
+  #kpi-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kpi {
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .kpi:nth-child(odd) {
+    border-right: 1px solid var(--border);
+  }
+  .kpi:nth-child(even) {
+    border-right: 0;
+  }
+  .kpi:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+  .kpi-value {
+    font-size: 1rem;
+  }
+  .kpi-label {
+    font-size: 0.6rem;
+  }
+  #diagram-fit {
+    top: 0.4rem;
+    right: 0.4rem;
+  }
+  #diagram-legend {
+    font-size: 0.7rem;
+    left: 0.4rem;
+    bottom: 0.4rem;
+    padding: 0.3rem 0.45rem;
+  }
+  .case-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+  #editor {
+    padding: 0.6rem 0.75rem;
+  }
+  .editor-grid {
+    grid-template-columns: max-content 1fr;
+  }
+  #results-panel {
+    padding: 0.6rem 0.75rem;
+    max-height: 50vh;
+  }
+  #footer {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.7rem;
+  }
+  .footer-right {
+    display: none;
+  }
+}
