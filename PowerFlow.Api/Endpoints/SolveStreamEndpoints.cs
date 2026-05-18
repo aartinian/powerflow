@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Logging;
 using PowerFlow.Api.Dtos;
 using PowerFlow.Api.Mapping;
@@ -17,115 +18,117 @@ internal static class SolveStreamEndpoints
 
     internal static RouteGroupBuilder MapSolveStreamEndpoints(this RouteGroupBuilder group)
     {
-        group.MapPost(
-            "solve/stream",
-            async (HttpContext context, SolveRequestDto request) =>
-            {
-                var ct = context.RequestAborted;
-
-                PowerFlow.Core.Models.PowerNetwork network;
-                try
+        group
+            .MapPost(
+                "solve/stream",
+                async (HttpContext context, SolveRequestDto request) =>
                 {
-                    network = request.Network.ToNetwork();
-                }
-                catch (ArgumentException ex)
-                {
-                    var constructionError = new ValidationErrorDto(
-                        "DUPLICATE_BUS_ID",
-                        ex.Message,
-                        "Error"
-                    );
-                    context.Response.StatusCode = 422;
-                    await context.Response.WriteAsJsonAsync(
-                        new ValidationResultDto(false, [constructionError]),
-                        JsonOpts,
-                        ct
-                    );
-                    return;
-                }
+                    var ct = context.RequestAborted;
 
-                var validation = NetworkValidator.Validate(network);
-                if (!validation.IsValid)
-                {
-                    context.Response.StatusCode = 422;
-                    await context.Response.WriteAsJsonAsync(validation.ToDto(), JsonOpts, ct);
-                    return;
-                }
-
-                // Switch to SSE before any solver work so the client sees the
-                // content-type header immediately and can open its EventSource reader.
-                context.Response.ContentType = "text/event-stream";
-                context.Response.Headers.CacheControl = "no-cache";
-                context.Response.Headers["X-Accel-Buffering"] = "no"; // disable Fly/nginx buffering
-
-                if (request.Options.Mode.Equals("DC", StringComparison.OrdinalIgnoreCase))
-                {
-                    // DC is a single LU step — no iterations to stream. Jump straight
-                    // to the result event.
-                    var dc = await Task.Run(() => new DcPowerFlowSolver().Solve(network), ct);
-                    await WriteSseAsync(
-                        context.Response,
-                        new ResultEventDto("result", dc.ToDto(network)),
-                        ct
-                    );
-                    return;
-                }
-
-                // AC: pipe solver log messages → Channel → SSE events.
-                var channel = Channel.CreateUnbounded<string>(
-                    new UnboundedChannelOptions { SingleWriter = true, SingleReader = true }
-                );
-
-                var logger = new SseLogger(channel.Writer, JsonOpts);
-                var solver = new NewtonRaphsonSolver
-                {
-                    Log = logger,
-                    Tolerance = request.Options.Tolerance,
-                    MaxIterations = request.Options.MaxIterations,
-                    FlatStart = request.Options.FlatStart,
-                    EnforceLimits = request.Options.EnforceLimits,
-                    DistributedSlack = request.Options.DistributedSlack,
-                    WarmStartFromDc = request.Options.WarmStartFromDc,
-                };
-
-                // Run solver on thread-pool; complete the channel when done so the
-                // reader loop below exits cleanly.
-                _ = Task.Run(
-                    async () =>
+                    PowerFlow.Core.Models.PowerNetwork network;
+                    try
                     {
-                        try
-                        {
-                            var ac = solver.Solve(network);
-                            var resultJson = JsonSerializer.Serialize(
-                                new ResultEventDto("result", ac.ToDto(network)),
-                                JsonOpts
-                            );
-                            channel.Writer.TryWrite(resultJson);
-                        }
-                        catch (Exception ex)
-                        {
-                            var errJson = JsonSerializer.Serialize(
-                                new ErrorEventDto("error", ex.Message),
-                                JsonOpts
-                            );
-                            channel.Writer.TryWrite(errJson);
-                        }
-                        finally
-                        {
-                            channel.Writer.Complete();
-                        }
-                    },
-                    ct
-                );
+                        network = request.Network.ToNetwork();
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        var constructionError = new ValidationErrorDto(
+                            "DUPLICATE_BUS_ID",
+                            ex.Message,
+                            "Error"
+                        );
+                        context.Response.StatusCode = 422;
+                        await context.Response.WriteAsJsonAsync(
+                            new ValidationResultDto(false, [constructionError]),
+                            JsonOpts,
+                            ct
+                        );
+                        return;
+                    }
 
-                // Drain the channel and forward each line as an SSE data frame.
-                await foreach (var line in channel.Reader.ReadAllAsync(ct))
-                {
-                    await context.Response.WriteAsync($"data: {line}\n\n", ct);
-                    await context.Response.Body.FlushAsync(ct);
+                    var validation = NetworkValidator.Validate(network);
+                    if (!validation.IsValid)
+                    {
+                        context.Response.StatusCode = 422;
+                        await context.Response.WriteAsJsonAsync(validation.ToDto(), JsonOpts, ct);
+                        return;
+                    }
+
+                    // Switch to SSE before any solver work so the client sees the
+                    // content-type header immediately and can open its EventSource reader.
+                    context.Response.ContentType = "text/event-stream";
+                    context.Response.Headers.CacheControl = "no-cache";
+                    context.Response.Headers["X-Accel-Buffering"] = "no"; // disable Fly/nginx buffering
+
+                    if (request.Options.Mode.Equals("DC", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // DC is a single LU step — no iterations to stream. Jump straight
+                        // to the result event.
+                        var dc = await Task.Run(() => new DcPowerFlowSolver().Solve(network), ct);
+                        await WriteSseAsync(
+                            context.Response,
+                            new ResultEventDto("result", dc.ToDto(network)),
+                            ct
+                        );
+                        return;
+                    }
+
+                    // AC: pipe solver log messages → Channel → SSE events.
+                    var channel = Channel.CreateUnbounded<string>(
+                        new UnboundedChannelOptions { SingleWriter = true, SingleReader = true }
+                    );
+
+                    var logger = new SseLogger(channel.Writer, JsonOpts);
+                    var solver = new NewtonRaphsonSolver
+                    {
+                        Log = logger,
+                        Tolerance = request.Options.Tolerance,
+                        MaxIterations = request.Options.MaxIterations,
+                        FlatStart = request.Options.FlatStart,
+                        EnforceLimits = request.Options.EnforceLimits,
+                        DistributedSlack = request.Options.DistributedSlack,
+                        WarmStartFromDc = request.Options.WarmStartFromDc,
+                    };
+
+                    // Run solver on thread-pool; complete the channel when done so the
+                    // reader loop below exits cleanly.
+                    _ = Task.Run(
+                        async () =>
+                        {
+                            try
+                            {
+                                var ac = solver.Solve(network);
+                                var resultJson = JsonSerializer.Serialize(
+                                    new ResultEventDto("result", ac.ToDto(network)),
+                                    JsonOpts
+                                );
+                                channel.Writer.TryWrite(resultJson);
+                            }
+                            catch (Exception ex)
+                            {
+                                var errJson = JsonSerializer.Serialize(
+                                    new ErrorEventDto("error", ex.Message),
+                                    JsonOpts
+                                );
+                                channel.Writer.TryWrite(errJson);
+                            }
+                            finally
+                            {
+                                channel.Writer.Complete();
+                            }
+                        },
+                        ct
+                    );
+
+                    // Drain the channel and forward each line as an SSE data frame.
+                    await foreach (var line in channel.Reader.ReadAllAsync(ct))
+                    {
+                        await context.Response.WriteAsync($"data: {line}\n\n", ct);
+                        await context.Response.Body.FlushAsync(ct);
+                    }
                 }
-            }
-        );
+            )
+            .RequireRateLimiting("solve");
 
         return group;
     }

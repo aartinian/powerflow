@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using PowerFlow.Api.Dtos;
 using PowerFlow.Api.Mapping;
 using PowerFlow.Core.Solver;
@@ -9,47 +10,51 @@ internal static class SolveEndpoints
 {
     internal static RouteGroupBuilder MapSolveEndpoints(this RouteGroupBuilder group)
     {
-        group.MapPost(
-            "solve",
-            async (SolveRequestDto request) =>
-            {
-                // Map DTO → domain, catching constructor-level errors.
-                PowerFlow.Core.Models.PowerNetwork network;
-                try
+        group
+            .MapPost(
+                "solve",
+                async (SolveRequestDto request) =>
                 {
-                    network = request.Network.ToNetwork();
-                }
-                catch (ArgumentException ex)
-                {
-                    var constructionError = new ValidationErrorDto(
-                        "DUPLICATE_BUS_ID",
-                        ex.Message,
-                        "Error"
-                    );
-                    return Results.UnprocessableEntity(
-                        new ValidationResultDto(false, [constructionError])
-                    );
-                }
+                    // Map DTO → domain, catching constructor-level errors.
+                    PowerFlow.Core.Models.PowerNetwork network;
+                    try
+                    {
+                        network = request.Network.ToNetwork();
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        var constructionError = new ValidationErrorDto(
+                            "DUPLICATE_BUS_ID",
+                            ex.Message,
+                            "Error"
+                        );
+                        return Results.UnprocessableEntity(
+                            new ValidationResultDto(false, [constructionError])
+                        );
+                    }
 
-                // Validate before solving — surfaces structural problems with stable
-                // error codes instead of cryptic solver exceptions.
-                var validation = NetworkValidator.Validate(network);
-                if (!validation.IsValid)
-                    return Results.UnprocessableEntity(validation.ToDto());
+                    // Validate before solving — surfaces structural problems with stable
+                    // error codes instead of cryptic solver exceptions.
+                    var validation = NetworkValidator.Validate(network);
+                    if (!validation.IsValid)
+                        return Results.UnprocessableEntity(validation.ToDto());
 
-                // Run on a thread-pool thread so the request pipeline stays responsive
-                // for large cases (case300 ~100 ms).
-                try
-                {
-                    var result = await Task.Run(() => Solve(network, request.Options));
-                    return Results.Ok(result);
+                    // Run on a thread-pool thread so the request pipeline stays responsive
+                    // for large cases (case300 ~100 ms).
+                    try
+                    {
+                        var result = await Task.Run(() => Solve(network, request.Options));
+                        return Results.Ok(result);
+                    }
+                    catch (Exception)
+                    {
+                        // Don't leak solver internals (stack traces, library messages)
+                        // back to the client — log server-side, return a generic 500.
+                        return Results.Problem("Solver failed", statusCode: 500);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    return Results.Problem(ex.Message, statusCode: 500);
-                }
-            }
-        );
+            )
+            .RequireRateLimiting("solve");
 
         return group;
     }

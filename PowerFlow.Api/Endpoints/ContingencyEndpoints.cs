@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.RateLimiting;
 using PowerFlow.Api.Dtos;
 using PowerFlow.Api.Mapping;
 using PowerFlow.Core.Solver;
@@ -12,70 +14,76 @@ internal static class ContingencyEndpoints
         // POST /api/contingency — N-1 branch contingency sweep.
         // Trips each in-service branch in turn and returns a ranked list of
         // post-contingency results, most severe first.
-        group.MapPost(
-            "contingency",
-            async (SolveRequestDto request) =>
-            {
-                PowerFlow.Core.Models.PowerNetwork baseNetwork;
-                try
+        group
+            .MapPost(
+                "contingency",
+                async (SolveRequestDto request) =>
                 {
-                    baseNetwork = request.Network.ToNetwork();
-                }
-                catch (ArgumentException ex)
-                {
-                    var constructionError = new ValidationErrorDto(
-                        "DUPLICATE_BUS_ID",
-                        ex.Message,
-                        "Error"
+                    PowerFlow.Core.Models.PowerNetwork baseNetwork;
+                    try
+                    {
+                        baseNetwork = request.Network.ToNetwork();
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        var constructionError = new ValidationErrorDto(
+                            "DUPLICATE_BUS_ID",
+                            ex.Message,
+                            "Error"
+                        );
+                        return Results.UnprocessableEntity(
+                            new ValidationResultDto(false, [constructionError])
+                        );
+                    }
+
+                    var validation = NetworkValidator.Validate(baseNetwork);
+                    if (!validation.IsValid)
+                        return Results.UnprocessableEntity(validation.ToDto());
+
+                    // Collect the in-service branch indices once — these are the
+                    // contingencies we will screen.
+                    var inSvcIndices = request
+                        .Network.Branches.Select((b, i) => (Branch: b, Index: i))
+                        .Where(x => x.Branch.IsInService)
+                        .Select(x => x.Index)
+                        .ToArray();
+
+                    var results = new ContingencyResultDto[inSvcIndices.Length];
+
+                    await Task.Run(() =>
+                        Parallel.For(
+                            0,
+                            inSvcIndices.Length,
+                            new ParallelOptions
+                            {
+                                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                            },
+                            i =>
+                            {
+                                var branchIdx = inSvcIndices[i];
+                                results[i] = SolveContingency(
+                                    request.Network,
+                                    branchIdx,
+                                    request.Options
+                                );
+                            }
+                        )
                     );
-                    return Results.UnprocessableEntity(
-                        new ValidationResultDto(false, [constructionError])
-                    );
+
+                    // Sort: non-converged first, then by overload count desc,
+                    // then by max loading pct desc. Most severe contingency at index 0.
+                    var sorted = results
+                        .OrderByDescending(r => !r.Converged)
+                        .ThenByDescending(r => r.BranchOverloadCount)
+                        .ThenByDescending(r => r.VoltageViolationCount)
+                        .ThenByDescending(r => r.MaxLoadingPct ?? 0)
+                        .ToArray();
+
+                    return Results.Ok(sorted);
                 }
-
-                var validation = NetworkValidator.Validate(baseNetwork);
-                if (!validation.IsValid)
-                    return Results.UnprocessableEntity(validation.ToDto());
-
-                // Collect the in-service branch indices once — these are the
-                // contingencies we will screen.
-                var inSvcIndices = request
-                    .Network.Branches.Select((b, i) => (Branch: b, Index: i))
-                    .Where(x => x.Branch.IsInService)
-                    .Select(x => x.Index)
-                    .ToArray();
-
-                var results = new ContingencyResultDto[inSvcIndices.Length];
-
-                await Task.Run(() =>
-                    Parallel.For(
-                        0,
-                        inSvcIndices.Length,
-                        new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
-                        i =>
-                        {
-                            var branchIdx = inSvcIndices[i];
-                            results[i] = SolveContingency(
-                                request.Network,
-                                branchIdx,
-                                request.Options
-                            );
-                        }
-                    )
-                );
-
-                // Sort: non-converged first, then by overload count desc,
-                // then by max loading pct desc. Most severe contingency at index 0.
-                var sorted = results
-                    .OrderByDescending(r => !r.Converged)
-                    .ThenByDescending(r => r.BranchOverloadCount)
-                    .ThenByDescending(r => r.VoltageViolationCount)
-                    .ThenByDescending(r => r.MaxLoadingPct ?? 0)
-                    .ToArray();
-
-                return Results.Ok(sorted);
-            }
-        );
+            )
+            .RequireRateLimiting("contingency")
+            .WithRequestTimeout("contingency");
 
         return group;
     }

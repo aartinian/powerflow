@@ -48,7 +48,7 @@ internal static class CasesEndpoints
         );
 
         group.MapPost(
-            "parse",
+            "cases/parse",
             (ParseRequestDto request) =>
             {
                 try
