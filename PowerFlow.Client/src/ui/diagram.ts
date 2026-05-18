@@ -16,6 +16,8 @@ export interface DiagramHandle {
   focusBranch(branchIndex: number): void;
   resetView(): void;
   resize(): void;
+  zoomIn(): void;
+  zoomOut(): void;
   destroy(): void;
 }
 
@@ -31,9 +33,10 @@ export function mountDiagram(
   let currentNet: NetworkDto | null = null;
 
   function buildElements(network: NetworkDto): ElementDefinition[] {
+    const genBusIds = new Set(network.generators.map((g) => g.busId));
     const nodes: ElementDefinition[] = network.buses.map((b) => ({
       group: 'nodes',
-      data: { id: `b${b.id}`, label: String(b.id), busId: b.id, busType: b.type },
+      data: { id: `b${b.id}`, label: String(b.id), busId: b.id, busType: b.type, hasGen: genBusIds.has(b.id) },
     }));
     // Include out-of-service branches too — they render dashed so the user
     // can tell what was tripped, and the edge can be toggled back without
@@ -46,6 +49,8 @@ export function mountDiagram(
         target: `b${br.toBusId}`,
         branchIndex: br.index,
         oos: !br.isInService,
+        isTx: br.tapRatio !== 0,
+        flowDir: 0,
       },
     }));
     return [...nodes, ...edges];
@@ -88,7 +93,7 @@ export function mountDiagram(
             height: tier.nodeSize,
             'background-color': (ele) => nodeColor(ele.data('vm'), ele.data('vmTone')),
             label: n <= 57 ? 'data(label)' : '',
-            'font-size': 8,
+            'font-size': n <= 14 ? 10 : n <= 57 ? 9 : 8,
             color: dark ? '#94a3b8' : '#334155',
             'text-background-color': dark ? '#162035' : '#ffffff',
             'text-background-opacity': dark ? 0.65 : 0,
@@ -105,6 +110,18 @@ export function mountDiagram(
             'border-color': '#2563eb',
             'border-opacity': 1,
           },
+        },
+        {
+          selector: 'node[?hasGen]',
+          style: {
+            'border-width': n > 300 ? 1 : 2,
+            'border-color': '#8b5cf6',
+            'border-opacity': 1,
+          },
+        },
+        {
+          selector: 'node[?hasGen]:selected',
+          style: { 'border-color': '#2563eb' },
         },
         {
           selector: 'edge',
@@ -124,11 +141,37 @@ export function mountDiagram(
           },
         },
         {
+          selector: 'edge[?isTx]',
+          style: {
+            width: tier.edgeWidth * 1.6,
+            'line-color': (ele) => {
+              const pct = ele.data('loadingPct') as number | null | undefined;
+              return typeof pct === 'number' && !Number.isNaN(pct) ? loadingColor(pct) : '#60a5fa';
+            },
+          },
+        },
+        {
           selector: 'edge[?oos]',
           style: {
             'line-style': 'dashed',
-            'line-color': '#94a3b8',
-            opacity: 0.4,
+            'line-color': '#475569',
+            opacity: 0.5,
+          },
+        },
+        {
+          selector: 'edge[flowDir = 1]',
+          style: {
+            'mid-target-arrow-shape': 'triangle',
+            'mid-target-arrow-color': (ele) => loadingColor(ele.data('loadingPct')),
+            'arrow-scale': 0.9,
+          },
+        },
+        {
+          selector: 'edge[flowDir = -1]',
+          style: {
+            'mid-source-arrow-shape': 'triangle',
+            'mid-source-arrow-color': (ele) => loadingColor(ele.data('loadingPct')),
+            'arrow-scale': 0.9,
           },
         },
       ],
@@ -188,10 +231,15 @@ export function mountDiagram(
     });
 
     const edgeLoading = new Map<number, number | null>();
-    for (const br of result.branches) edgeLoading.set(br.branchIndex, br.loadingPct);
+    const edgeFlowDir = new Map<number, number>();
+    for (const br of result.branches) {
+      edgeLoading.set(br.branchIndex, br.loadingPct);
+      edgeFlowDir.set(br.branchIndex, br.pij > 0 ? 1 : br.pij < 0 ? -1 : 0);
+    }
     cy.edges().forEach((edge) => {
       const idx = edge.data('branchIndex') as number;
       edge.data('loadingPct', edgeLoading.get(idx) ?? null);
+      edge.data('flowDir', edgeFlowDir.get(idx) ?? 0);
     });
 
     cy.style().update();
@@ -205,6 +253,7 @@ export function mountDiagram(
     });
     cy.edges().forEach((edge) => {
       edge.data('loadingPct', null);
+      edge.data('flowDir', 0);
     });
     cy.style().update();
   }
@@ -228,11 +277,15 @@ export function mountDiagram(
         render(net);
         return;
       }
+      const genBusIds = new Set(net.generators.map((g) => g.busId));
       const branchById = new Map(net.branches.map((b) => [b.index, b]));
       const busById = new Map(net.buses.map((b) => [b.id, b]));
       cy.nodes().forEach((node) => {
         const b = busById.get(node.data('busId') as number);
-        if (b) node.data('busType', b.type);
+        if (b) {
+          node.data('busType', b.type);
+          node.data('hasGen', genBusIds.has(b.id));
+        }
       });
       cy.edges().forEach((edge) => {
         const br = branchById.get(edge.data('branchIndex') as number);
@@ -277,6 +330,12 @@ export function mountDiagram(
     },
     resize() {
       if (cy) cy.resize();
+    },
+    zoomIn() {
+      if (cy) cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+    },
+    zoomOut() {
+      if (cy) cy.zoom({ level: cy.zoom() / 1.3, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
     },
     destroy() {
       if (cy) {

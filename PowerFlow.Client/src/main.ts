@@ -77,8 +77,20 @@ const fitBtn = document.createElement('button');
 fitBtn.id = 'diagram-fit';
 fitBtn.className = 'secondary mini';
 fitBtn.title = 'Fit network to view';
-fitBtn.textContent = '⤢ Fit';
+fitBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg> Fit`;
 fitBtn.hidden = true;
+const zoomInBtn = document.createElement('button');
+zoomInBtn.id = 'diagram-zoom-in';
+zoomInBtn.className = 'secondary mini';
+zoomInBtn.title = 'Zoom in';
+zoomInBtn.textContent = '+';
+zoomInBtn.hidden = true;
+const zoomOutBtn = document.createElement('button');
+zoomOutBtn.id = 'diagram-zoom-out';
+zoomOutBtn.className = 'secondary mini';
+zoomOutBtn.title = 'Zoom out';
+zoomOutBtn.textContent = '−';
+zoomOutBtn.hidden = true;
 const legendEl = document.createElement('div');
 legendEl.id = 'diagram-legend';
 legendEl.hidden = true;
@@ -96,7 +108,7 @@ legendEl.innerHTML = `
 `;
 const editorEl = document.createElement('div');
 editorEl.id = 'editor';
-diagramWrap.append(diagramEl, fitBtn, legendEl, editorEl);
+diagramWrap.append(diagramEl, fitBtn, zoomInBtn, zoomOutBtn, legendEl, editorEl);
 const resultsEl = document.createElement('div');
 resultsEl.id = 'results-panel';
 mainEl.append(kpiEl, solveStripEl, diagramWrap, resultsEl);
@@ -189,6 +201,8 @@ const diagram = mountDiagram(diagramEl, (selection) => {
   }
 });
 fitBtn.addEventListener('click', () => diagram.resetView());
+zoomInBtn.addEventListener('click', () => diagram.zoomIn());
+zoomOutBtn.addEventListener('click', () => diagram.zoomOut());
 
 let lastResult: SolveResultDto | null = null;
 let solveController: AbortController | null = null;
@@ -280,6 +294,8 @@ network.subscribe((net, kind) => {
     if (lastResult) setStale(true);
   }
   fitBtn.hidden = net === null;
+  zoomInBtn.hidden = net === null;
+  zoomOutBtn.hidden = net === null;
   legendEl.hidden = net === null;
   if (net === null) {
     results.clear();

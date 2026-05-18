@@ -389,12 +389,18 @@ a:hover {
   display: none;
 }
 
-#diagram-fit {
+#diagram-fit,
+#diagram-zoom-in,
+#diagram-zoom-out {
   position: absolute;
-  top: 0.6rem;
   right: 0.7rem;
   z-index: 2;
+  min-width: 2rem;
+  text-align: center;
 }
+#diagram-fit   { top: 0.6rem; }
+#diagram-zoom-in  { top: 2.4rem; }
+#diagram-zoom-out { top: 4.0rem; }
 
 #diagram-legend {
   position: absolute;
@@ -1077,10 +1083,14 @@ table.datatable.clickable tbody tr td:last-child::after {
   .kpi-label {
     font-size: 0.6rem;
   }
-  #diagram-fit {
-    top: 0.4rem;
+  #diagram-fit,
+  #diagram-zoom-in,
+  #diagram-zoom-out {
     right: 0.4rem;
   }
+  #diagram-fit      { top: 0.4rem; }
+  #diagram-zoom-in  { top: 2.1rem; }
+  #diagram-zoom-out { top: 3.65rem; }
   #diagram-legend {
     font-size: 0.7rem;
     left: 0.4rem;
