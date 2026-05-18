@@ -128,10 +128,10 @@ a:hover {
   gap: 0.55rem;
 }
 .brand-mark {
-  font-size: var(--fs-md);
-  line-height: 1;
   display: flex;
   align-items: center;
+  color: var(--action);
+  flex-shrink: 0;
 }
 .brand-name {
   font-weight: 600;
@@ -725,12 +725,11 @@ button.mini {
 
 .tab-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
   border-bottom: 1px solid var(--border);
-  gap: 0.5rem;
 }
 .tabs {
+  flex: 1;
   display: flex;
   gap: 0.1rem;
   overflow-x: auto;
@@ -756,10 +755,16 @@ button.mini {
 .csv-btn {
   background: transparent;
   color: var(--accent);
-  border: 1px solid var(--border);
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.25rem 0.75rem;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
+  align-self: center;
+}
+.csv-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .csv-btn[hidden] {
   display: none;
@@ -869,26 +874,15 @@ table.datatable.clickable tbody tr {
 /* ── Footer ─────────────────────────────────────────────────────────── */
 #footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.4rem 1.25rem;
+  padding: 0.35rem 1.25rem;
   background: var(--panel);
   border-top: 1px solid var(--border);
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
-.footer-right {
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-}
-.tech-pill {
-  border: 1px solid var(--border);
-  padding: 0.1rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
+.footer-attribution {
+  /* intentionally minimal */
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────── */

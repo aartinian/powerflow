@@ -96,14 +96,7 @@ bodyEl.append(sidebarEl, mainEl);
 app.append(headerEl, bodyEl, footerEl);
 
 footerEl.innerHTML = `
-  <div class="footer-left">Built by <a href="https://github.com/aartinian" target="_blank" rel="noreferrer">aart</a> · <a href="https://github.com/aartinian/powerflow" target="_blank" rel="noreferrer">github.com/aartinian/powerflow</a></div>
-  <div class="footer-right">
-    <span class="tech-pill">C# · .NET 10</span>
-    <span class="tech-pill">ASP.NET Minimal API</span>
-    <span class="tech-pill">CSparse (sparse LU)</span>
-    <span class="tech-pill">TypeScript + Vite</span>
-    <span class="tech-pill">Cytoscape.js</span>
-  </div>
+  <span class="footer-attribution">Built by <a href="https://github.com/aartinian" target="_blank" rel="noreferrer">aart</a></span>
 `;
 
 mountHeader(headerEl, CLIENT_VERSION);

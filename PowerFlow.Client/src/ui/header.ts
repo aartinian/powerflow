@@ -36,15 +36,18 @@ export function mountHeader(container: HTMLElement, version: string): void {
 
   container.innerHTML = `
     <div class="brand">
-      <span class="brand-mark">⚡</span>
-      <span class="brand-name">PowerFlow</span>
-      <span class="badge" title="Client version">v${version}</span>
+      <svg class="brand-mark" width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      <span class="brand-name" title="PowerFlow v${version}">PowerFlow</span>
     </div>
     <nav class="header-nav">
-      <a href="https://github.com/aartinian/powerflow" target="_blank" rel="noreferrer" class="icon-btn" title="GitHub">
+      <a href="https://github.com/aartinian/powerflow" target="_blank" rel="noreferrer" class="icon-btn" title="View on GitHub">
         GitHub
       </a>
-      <button class="icon-btn" id="theme-toggle" title="Toggle theme">
+      <button class="icon-btn" id="theme-toggle" title="Toggle light / dark theme">
         <span id="theme-icon">${effectiveTheme() === 'dark' ? '☀' : '☾'}</span>
       </button>
     </nav>
