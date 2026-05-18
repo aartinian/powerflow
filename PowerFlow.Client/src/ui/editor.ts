@@ -103,6 +103,14 @@ export function mountEditor(container: HTMLElement, cb: EditorCallbacks): Editor
     setVal(grid, 'vmax', bus.vmax);
     container.append(grid);
 
+    if (isSlack) {
+      const note = document.createElement('p');
+      note.className = 'editor-slack-note';
+      note.textContent =
+        'This is the slack (reference) bus. It fixes the system voltage angle reference and cannot be deleted.';
+      container.append(note);
+    }
+
     container.append(
       actions(
         () => {

@@ -216,7 +216,7 @@ a:hover {
 
 #main {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -311,13 +311,12 @@ a:hover {
   color: var(--error);
 }
 
-/* Explicit row placement so display:none siblings don't cause auto-flow
-   to skip tracks, pushing visible elements into the wrong rows. */
-#kpi-bar      { grid-row: 1; }
-#solve-strip  { grid-row: 2; }
-#diagram-wrap { grid-row: 3; }
-#editor       { grid-row: 4; }
-#results-panel { grid-row: 5; }
+/* Explicit row placement so display:none siblings (solve-strip) don't cause
+   auto-flow to skip tracks, pushing visible elements into the wrong rows. */
+#kpi-bar       { grid-row: 1; }
+#solve-strip   { grid-row: 2; }
+#diagram-wrap  { grid-row: 3; }
+#results-panel { grid-row: 4; }
 
 /* ── Solve strip ────────────────────────────────────────────────────── */
 /* Slim bar between the KPI row and the diagram. Hidden until first solve. */
@@ -677,11 +676,22 @@ button.mini {
   color: var(--muted);
 }
 
-/* ── Editor card ────────────────────────────────────────────────────── */
+/* ── Editor popover ─────────────────────────────────────────────────── */
+/* Floats over the diagram at the bottom-right corner. The legend lives at
+   bottom-left so the two overlays don't collide. */
 #editor {
-  border-top: 1px solid var(--border);
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  width: 272px;
+  max-height: 72%;
+  overflow-y: auto;
   background: var(--panel);
-  padding: 0.7rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-md);
+  z-index: 3;
 }
 #editor[hidden] {
   display: none;
@@ -704,8 +714,8 @@ button.mini {
 }
 .editor-grid {
   display: grid;
-  grid-template-columns: max-content 1fr max-content 1fr max-content 1fr;
-  gap: 0.35rem 0.6rem;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 0.65rem;
   align-items: center;
 }
 .editor-grid label {
@@ -732,6 +742,13 @@ button.mini {
 .editor-grid .cell-row input[type="checkbox"] {
   margin: 0;
 }
+.editor-slack-note {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+
 .editor-actions {
   margin-top: 0.6rem;
   display: flex;
@@ -989,9 +1006,7 @@ table.datatable.clickable tbody tr td:last-child::after {
   .kpi:nth-child(6) {
     border-right: 0;
   }
-  .editor-grid {
-    grid-template-columns: max-content 1fr max-content 1fr;
-  }
+
 }
 
 /* Phone / narrow: stack sidebar on top of main, single column, smaller
@@ -1078,9 +1093,7 @@ table.datatable.clickable tbody tr td:last-child::after {
   #editor {
     padding: 0.6rem 0.75rem;
   }
-  .editor-grid {
-    grid-template-columns: max-content 1fr;
-  }
+
   #results-panel {
     padding: 0.6rem 0.75rem;
     max-height: 50vh;

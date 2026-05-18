@@ -94,12 +94,12 @@ legendEl.innerHTML = `
     <span class="swatch err"></span>≥90%
   </div>
 `;
-diagramWrap.append(diagramEl, fitBtn, legendEl);
 const editorEl = document.createElement('div');
 editorEl.id = 'editor';
+diagramWrap.append(diagramEl, fitBtn, legendEl, editorEl);
 const resultsEl = document.createElement('div');
 resultsEl.id = 'results-panel';
-mainEl.append(kpiEl, solveStripEl, diagramWrap, editorEl, resultsEl);
+mainEl.append(kpiEl, solveStripEl, diagramWrap, resultsEl);
 
 bodyEl.append(sidebarEl, mainEl);
 app.append(headerEl, bodyEl, footerEl);
