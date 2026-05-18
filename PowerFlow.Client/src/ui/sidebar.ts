@@ -34,7 +34,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     <div class="case-cards" id="case-cards"></div>
     <label class="case-upload" id="case-upload">
       <input type="file" accept=".m" hidden id="case-file" />
-      <span class="case-upload-icon">⤴</span>
+      <span class="case-upload-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></span>
       <span class="case-upload-text">Upload .m file</span>
     </label>
   `;
@@ -56,13 +56,19 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     <h2>Load scaling</h2>
     <div class="field">
       <div class="slider-row">
-        <input type="range" id="load-scale" min="50" max="200" step="5" value="100" disabled />
+        <input type="range" id="load-scale" min="50" max="200" step="5" value="100" disabled list="load-ticks" />
+        <input type="number" id="load-num" class="slider-num" min="50" max="200" step="5" value="100" disabled />
         <button id="load-reset" class="secondary mini" title="Reset to 100%" disabled>↺</button>
       </div>
+      <datalist id="load-ticks">
+        <option value="50"></option><option value="75"></option><option value="100"></option>
+        <option value="125"></option><option value="150"></option><option value="175"></option><option value="200"></option>
+      </datalist>
       <div class="readout" id="load-readout">100% — load a case</div>
     </div>
   `;
   const scaleInput = stressSection.querySelector<HTMLInputElement>('#load-scale')!;
+  const numInput = stressSection.querySelector<HTMLInputElement>('#load-num')!;
   const resetBtn = stressSection.querySelector<HTMLButtonElement>('#load-reset')!;
   const readout = stressSection.querySelector<HTMLDivElement>('#load-readout')!;
   let baseLoadMw: number | null = null;
@@ -79,9 +85,20 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
         ? `100% — ${baseLoadMw.toFixed(1)} MW`
         : `${pct}% — ${scaled.toFixed(1)} MW (base ${baseLoadMw.toFixed(1)} MW)`;
   }
-  scaleInput.addEventListener('input', refreshReadout);
+  scaleInput.addEventListener('input', () => {
+    numInput.value = scaleInput.value;
+    refreshReadout();
+  });
+  numInput.addEventListener('change', () => {
+    const raw = parseInt(numInput.value, 10);
+    const clamped = Math.max(50, Math.min(200, Math.round(raw / 5) * 5));
+    scaleInput.value = String(clamped);
+    numInput.value = String(clamped);
+    refreshReadout();
+  });
   resetBtn.addEventListener('click', () => {
     scaleInput.value = '100';
+    numInput.value = '100';
     refreshReadout();
   });
 
@@ -294,8 +311,9 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
       baseLoadMw = totalMw;
       const enabled = totalMw !== null;
       scaleInput.disabled = !enabled;
+      numInput.disabled = !enabled;
       resetBtn.disabled = !enabled;
-      if (!enabled) scaleInput.value = '100';
+      if (!enabled) { scaleInput.value = '100'; numInput.value = '100'; }
       refreshReadout();
     },
     getLoadScale(): number {

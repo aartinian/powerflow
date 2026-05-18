@@ -471,6 +471,10 @@ a:hover {
   font-size: 0.7rem;
   color: var(--muted);
 }
+.case-card:hover:not(.active) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
 .case-card.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
@@ -480,19 +484,35 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.4rem 0.55rem;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
   cursor: pointer;
-  color: var(--muted);
+  color: var(--accent);
   font-size: 0.8rem;
+  background: transparent;
+  transition: background 0.1s;
 }
 .case-upload:hover {
-  color: var(--text);
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .case-upload-icon {
-  font-size: 1rem;
+  display: flex;
+  align-items: center;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+.slider-num {
+  width: 3.5rem;
+  text-align: center;
+  padding: 0.15rem 0.3rem;
+  flex: 0 0 auto;
 }
 
 .field {
