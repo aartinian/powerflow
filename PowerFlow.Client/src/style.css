@@ -1143,15 +1143,26 @@ table.datatable.clickable tbody tr td:last-child::after {
   .kpi {
     padding: 0.38rem 0.6rem;
     border-bottom: 1px solid var(--border);
-  }
-  .kpi:nth-child(odd) {
     border-right: 1px solid var(--border);
   }
-  .kpi:nth-child(even) {
-    border-right: 0;
-  }
-  .kpi:nth-last-child(-n + 2) {
-    border-bottom: 0;
+  /* Reorder: surface the most actionable KPIs first on narrow screens */
+  [data-kpi="vrange"]  { order: 1; }
+  [data-kpi="maxload"] { order: 2; }
+  [data-kpi="gen"]     { order: 3; }
+  [data-kpi="load"]    { order: 4; }
+  [data-kpi="losses"]  { order: 5; }
+  [data-kpi="buses"]   { order: 6; }
+  /* Right column (visual positions 2, 4, 6) */
+  [data-kpi="maxload"],
+  [data-kpi="load"],
+  [data-kpi="buses"] { border-right: 0; }
+  /* Last row (visual positions 5, 6) */
+  [data-kpi="losses"],
+  [data-kpi="buses"] { border-bottom: 0; }
+  /* Collapse solver knobs on mobile — Solve button stays reachable */
+  #solve-section .field-row,
+  #solve-section .field-pair {
+    display: none;
   }
   .kpi-value {
     font-size: 1rem;
