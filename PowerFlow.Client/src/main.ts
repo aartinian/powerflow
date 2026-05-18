@@ -10,13 +10,27 @@ import {
   validate,
 } from './api.js';
 import {
+  addBranch,
+  addBus,
+  addGenerator,
   network,
+  removeBranch,
+  removeBus,
+  removeGenerator,
   scaleLoads,
   totalLoadMw,
   updateBranch,
   updateBus,
+  updateGenerator,
 } from './network.js';
-import type { BranchDto, BusDto, NetworkDto, SolveOptionsDto, SolveResultDto } from './types.js';
+import type {
+  BranchDto,
+  BusDto,
+  GeneratorDto,
+  NetworkDto,
+  SolveOptionsDto,
+  SolveResultDto,
+} from './types.js';
 import { mountDiagram } from './ui/diagram.js';
 import { mountEditor } from './ui/editor.js';
 import { mountHeader } from './ui/header.js';
@@ -97,6 +111,11 @@ mountHeader(headerEl, CLIENT_VERSION);
 const kpi = mountKpi(kpiEl);
 const results = mountResults(resultsEl, {
   onContingencyRowClick: (branchIndex) => diagram.focusBranch(branchIndex),
+  onGeneratorRowClick: (index) => {
+    const net = network.get();
+    const gen = net?.generators.find((g) => g.index === index);
+    if (gen) editor.showGenerator(gen as GeneratorDto);
+  },
 });
 const editor = mountEditor(editorEl, {
   onBusApply: (busId, patch) => {
@@ -105,12 +124,39 @@ const editor = mountEditor(editorEl, {
     network.set(updateBus(net, busId, patch), 'edit');
     results.setStatus(`Bus ${busId} updated — solve to refresh results.`);
   },
+  onBusDelete: (busId) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(removeBus(net, busId), 'topology');
+    editor.hide();
+    results.setStatus(`Bus ${busId} removed (and linked branches/gens) — solve to refresh.`);
+  },
   onBranchApply: (branchIndex, patch) => {
     const net = network.get();
     if (!net) return;
     network.set(updateBranch(net, branchIndex, patch), 'edit');
     const verb = patch.isInService === false ? 'tripped' : 'updated';
     results.setStatus(`Branch #${branchIndex} ${verb} — solve to refresh results.`);
+  },
+  onBranchDelete: (branchIndex) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(removeBranch(net, branchIndex), 'topology');
+    editor.hide();
+    results.setStatus(`Branch #${branchIndex} removed — solve to refresh.`);
+  },
+  onGeneratorApply: (index, patch) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(updateGenerator(net, index, patch), 'edit');
+    results.setStatus(`Generator #${index} updated — solve to refresh results.`);
+  },
+  onGeneratorDelete: (index) => {
+    const net = network.get();
+    if (!net) return;
+    network.set(removeGenerator(net, index), 'topology');
+    editor.hide();
+    results.setStatus(`Generator #${index} removed — solve to refresh.`);
   },
   onClose: () => {
     /* keep diagram selection as is */
@@ -123,7 +169,7 @@ const diagram = mountDiagram(diagramEl, (selection) => {
   switch (selection.kind) {
     case 'bus': {
       const bus = net.buses.find((b) => b.id === selection.busId);
-      if (bus) editor.showBus(bus as BusDto);
+      if (bus) editor.showBus(bus as BusDto, bus.type === 'Slack');
       results.selectBus(selection.busId);
       break;
     }
@@ -152,6 +198,44 @@ const sidebar = mountSidebar(sidebarEl, {
   onCancelSolve: () => solveController?.abort(),
   onContingency: handleContingency,
   onCancelContingency: () => contingencyController?.abort(),
+  onAddBus: () => {
+    const net = network.get();
+    if (!net) return;
+    const { net: next, busId } = addBus(net);
+    network.set(next, 'topology');
+    const newBus = next.buses.find((b) => b.id === busId)!;
+    editor.showBus(newBus, false);
+    diagram.focusBus(busId);
+    results.setStatus(`Added bus ${busId} (PQ, zero load) — edit and solve.`);
+  },
+  onAddBranch: (fromBusId, toBusId) => {
+    const net = network.get();
+    if (!net) return;
+    const validIds = new Set(net.buses.map((b) => b.id));
+    if (!validIds.has(fromBusId) || !validIds.has(toBusId)) {
+      results.setStatus(`Branch not added — bus ${validIds.has(fromBusId) ? toBusId : fromBusId} doesn't exist.`, 'error');
+      return;
+    }
+    const { net: next, index } = addBranch(net, fromBusId, toBusId);
+    network.set(next, 'topology');
+    const newBranch = next.branches.find((b) => b.index === index)!;
+    editor.showBranch(newBranch);
+    diagram.focusBranch(index);
+    results.setStatus(`Added branch ${fromBusId}→${toBusId} (default R/X) — tune and solve.`);
+  },
+  onAddGenerator: (busId) => {
+    const net = network.get();
+    if (!net) return;
+    if (!net.buses.some((b) => b.id === busId)) {
+      results.setStatus(`Generator not added — bus ${busId} doesn't exist.`, 'error');
+      return;
+    }
+    const { net: next, index } = addGenerator(net, busId);
+    network.set(next, 'topology');
+    const newGen = next.generators.find((g) => g.index === index)!;
+    editor.showGenerator(newGen);
+    results.setStatus(`Added generator at bus ${busId} — tune and solve.`);
+  },
 });
 
 function setStale(stale: boolean): void {
@@ -170,6 +254,9 @@ network.subscribe((net, kind) => {
     sidebar.showResult(null);
     kpi.setResult(null);
     setStale(false);
+  } else if (kind === 'topology' && net) {
+    diagram.applyTopology(net);
+    if (lastResult) setStale(true);
   } else if (net) {
     diagram.applyEdit(net);
     // Any edit invalidates the displayed result — flag stale so the user

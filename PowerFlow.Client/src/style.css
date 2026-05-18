@@ -428,6 +428,14 @@ button.danger {
   border-color: var(--error);
   color: var(--accent-fg);
 }
+button.danger-text {
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
+}
+button.danger-text:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
 button.mini {
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
@@ -594,6 +602,24 @@ button.mini {
   margin-top: 0.6rem;
   display: flex;
   justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.build-row {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.build-form {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.4rem;
+}
+.build-form[hidden] {
+  display: none;
 }
 
 /* ── Results panel ─────────────────────────────────────────────────── */

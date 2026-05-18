@@ -7,6 +7,9 @@ export interface SidebarCallbacks {
   onCancelSolve: () => void;
   onContingency: (options: SolveOptionsDto) => void | Promise<void>;
   onCancelContingency: () => void;
+  onAddBus: () => void;
+  onAddBranch: (fromBusId: number, toBusId: number) => void;
+  onAddGenerator: (busId: number) => void;
 }
 
 // One-line hints attached to each solver option as the native title=""
@@ -165,7 +168,85 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     else void callbacks.onContingency(readOptions());
   });
 
-  container.append(caseSection, stressSection, solveSection, resultBlock, contingencySection);
+  // ── Build section ───────────────────────────────────────────────────────
+  // Lightweight create-buttons for buses/branches/generators. Branch and
+  // generator require a target so the form expands inline; bus creation is
+  // one-click since the new bus defaults to PQ with zero load.
+  const buildSection = document.createElement('section');
+  buildSection.id = 'build-section';
+  buildSection.hidden = true;
+  buildSection.innerHTML = `
+    <h2>Build</h2>
+    <div class="build-row">
+      <button class="secondary mini" id="add-bus-btn">+ Bus</button>
+      <button class="secondary mini" id="add-branch-toggle">+ Branch</button>
+      <button class="secondary mini" id="add-gen-toggle">+ Generator</button>
+    </div>
+    <div class="build-form" id="add-branch-form" hidden>
+      <div class="field-pair">
+        <div class="field">
+          <label>From bus</label>
+          <input type="number" id="brn-from" step="1" min="1" />
+        </div>
+        <div class="field">
+          <label>To bus</label>
+          <input type="number" id="brn-to" step="1" min="1" />
+        </div>
+      </div>
+      <div class="editor-actions">
+        <button id="add-branch-confirm">Create</button>
+      </div>
+    </div>
+    <div class="build-form" id="add-gen-form" hidden>
+      <div class="field">
+        <label>Bus</label>
+        <input type="number" id="gen-bus" step="1" min="1" />
+      </div>
+      <div class="editor-actions">
+        <button id="add-gen-confirm">Create</button>
+      </div>
+    </div>
+  `;
+  const addBusBtn = buildSection.querySelector<HTMLButtonElement>('#add-bus-btn')!;
+  const addBranchToggle = buildSection.querySelector<HTMLButtonElement>('#add-branch-toggle')!;
+  const addBranchForm = buildSection.querySelector<HTMLDivElement>('#add-branch-form')!;
+  const addBranchConfirm = buildSection.querySelector<HTMLButtonElement>('#add-branch-confirm')!;
+  const brnFrom = buildSection.querySelector<HTMLInputElement>('#brn-from')!;
+  const brnTo = buildSection.querySelector<HTMLInputElement>('#brn-to')!;
+  const addGenToggle = buildSection.querySelector<HTMLButtonElement>('#add-gen-toggle')!;
+  const addGenForm = buildSection.querySelector<HTMLDivElement>('#add-gen-form')!;
+  const addGenConfirm = buildSection.querySelector<HTMLButtonElement>('#add-gen-confirm')!;
+  const genBus = buildSection.querySelector<HTMLInputElement>('#gen-bus')!;
+
+  addBusBtn.addEventListener('click', () => callbacks.onAddBus());
+  addBranchToggle.addEventListener('click', () => {
+    addBranchForm.hidden = !addBranchForm.hidden;
+    addGenForm.hidden = true;
+  });
+  addGenToggle.addEventListener('click', () => {
+    addGenForm.hidden = !addGenForm.hidden;
+    addBranchForm.hidden = true;
+  });
+  addBranchConfirm.addEventListener('click', () => {
+    const from = parseInt(brnFrom.value, 10);
+    const to = parseInt(brnTo.value, 10);
+    if (Number.isFinite(from) && Number.isFinite(to) && from !== to) {
+      callbacks.onAddBranch(from, to);
+      addBranchForm.hidden = true;
+      brnFrom.value = '';
+      brnTo.value = '';
+    }
+  });
+  addGenConfirm.addEventListener('click', () => {
+    const bus = parseInt(genBus.value, 10);
+    if (Number.isFinite(bus)) {
+      callbacks.onAddGenerator(bus);
+      addGenForm.hidden = true;
+      genBus.value = '';
+    }
+  });
+
+  container.append(caseSection, stressSection, solveSection, resultBlock, contingencySection, buildSection);
 
   function readOptions(): SolveOptionsDto {
     const $ = <T extends Element>(s: string) => solveSection.querySelector<T>(s)!;
@@ -210,6 +291,7 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     setSolveEnabled(enabled: boolean) {
       solveBtn.disabled = !enabled;
       ctgBtn.disabled = !enabled;
+      buildSection.hidden = !enabled;
     },
     setSolveBusy(busy: boolean) {
       solveBusy = busy;

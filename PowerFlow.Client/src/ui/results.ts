@@ -23,6 +23,7 @@ export type TabId =
 
 export interface ResultsCallbacks {
   onContingencyRowClick: (branchIndex: number) => void;
+  onGeneratorRowClick: (index: number) => void;
 }
 
 export interface ResultsHandle {
@@ -142,7 +143,7 @@ export function mountResults(container: HTMLElement, callbacks: ResultsCallbacks
       case 'branches':
         return renderBranches(result.branches);
       case 'generators':
-        return renderGenerators(result.generators);
+        return renderGenerators(result.generators, callbacks.onGeneratorRowClick);
       case 'violations':
         return renderViolations(result.violations);
     }
@@ -400,8 +401,11 @@ function renderBranches(branches: SolvedBranchDto[]): Node {
   );
 }
 
-function renderGenerators(gens: SolvedGeneratorDto[]): Node {
-  return buildTable(
+function renderGenerators(
+  gens: SolvedGeneratorDto[],
+  onRowClick: (index: number) => void,
+): Node {
+  const table = buildTable(
     ['#', 'Bus', 'Pg (MW)', 'Qg (MVAr)', 'Limit'],
     gens.map((g) => ({
       id: `gen-${g.index}`,
@@ -414,6 +418,13 @@ function renderGenerators(gens: SolvedGeneratorDto[]): Node {
       ],
     })),
   );
+  table.classList.add('clickable');
+  table.addEventListener('click', (ev) => {
+    const row = (ev.target as HTMLElement).closest<HTMLTableRowElement>('tr');
+    if (!row || !row.id.startsWith('gen-')) return;
+    onRowClick(parseInt(row.id.slice(4), 10));
+  });
+  return table;
 }
 
 function renderContingency(

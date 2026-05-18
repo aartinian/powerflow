@@ -10,7 +10,9 @@ export type DiagramSelection =
 export interface DiagramHandle {
   setNetwork(network: NetworkDto | null): void;
   applyEdit(network: NetworkDto): void;
+  applyTopology(network: NetworkDto): void;
   setSolveResult(result: SolveResultDto | null): void;
+  focusBus(busId: number): void;
   focusBranch(branchIndex: number): void;
   resetView(): void;
   resize(): void;
@@ -244,6 +246,15 @@ export function mountDiagram(
       if (result) applyResult(result);
       else clearResult();
     },
+    focusBus(busId) {
+      if (!cy) return;
+      const node = cy.$(`#b${busId}`);
+      if (node.empty()) return;
+      cy.elements().unselect();
+      node.select();
+      cy.animate({ center: { eles: node }, duration: 250 });
+      onSelect({ kind: 'bus', busId });
+    },
     focusBranch(branchIndex) {
       if (!cy) return;
       const edge = cy.$(`#e${branchIndex}`);
@@ -252,6 +263,14 @@ export function mountDiagram(
       edge.select();
       cy.animate({ center: { eles: edge }, duration: 250 });
       onSelect({ kind: 'branch', branchIndex });
+    },
+    // Topology changed (element added/removed). Re-render to refresh element
+    // sets — layout re-runs, so positions reshuffle. Acceptable for v1 since
+    // the alternative (incremental add/remove with preserved layout) requires
+    // significant cytoscape plumbing.
+    applyTopology(net) {
+      currentNet = net;
+      render(net);
     },
     resetView() {
       if (cy) cy.fit(undefined, 30);
