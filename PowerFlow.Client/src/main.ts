@@ -72,7 +72,26 @@ const diagramWrap = document.createElement('div');
 diagramWrap.id = 'diagram-wrap';
 const diagramEl = document.createElement('div');
 diagramEl.id = 'diagram';
-diagramEl.innerHTML = `<div class="placeholder">Load a case to render the network.</div>`;
+const placeholderEl = document.createElement('div');
+placeholderEl.className = 'placeholder';
+placeholderEl.innerHTML = `<p class="empty-title">No network loaded</p>`;
+const tipsEl = document.createElement('div');
+tipsEl.className = 'onboarding-tips';
+tipsEl.hidden = localStorage.getItem('powerflow.onboarded') === '1';
+tipsEl.innerHTML = `
+  <ol class="empty-steps">
+    <li>Pick a case card in the sidebar, or upload a <code>.m</code> file</li>
+    <li>Click <strong>Solve</strong> to run AC or DC power flow</li>
+    <li>Click any bus or branch in the diagram to edit it</li>
+  </ol>
+  <button class="secondary mini" id="dismiss-tips">Got it</button>
+`;
+tipsEl.querySelector<HTMLButtonElement>('#dismiss-tips')!.addEventListener('click', () => {
+  localStorage.setItem('powerflow.onboarded', '1');
+  tipsEl.hidden = true;
+});
+placeholderEl.append(tipsEl);
+diagramEl.append(placeholderEl);
 const fitBtn = document.createElement('button');
 fitBtn.id = 'diagram-fit';
 fitBtn.className = 'secondary mini';
@@ -271,6 +290,7 @@ function showSolveStrip(r: SolveResultDto | null): void {
 function setStale(stale: boolean): void {
   kpi.setStale(stale);
   if (!solveStripEl.hidden) solveStripEl.classList.toggle('stale', stale);
+  sidebar.setSolveStale(stale);
 }
 
 network.subscribe((net, kind) => {
@@ -299,10 +319,9 @@ network.subscribe((net, kind) => {
   legendEl.hidden = net === null;
   if (net === null) {
     results.clear();
-    diagramEl.querySelector('.placeholder')?.removeAttribute('hidden');
+    placeholderEl.removeAttribute('hidden');
   } else {
-    const ph = diagramEl.querySelector('.placeholder');
-    if (ph) ph.setAttribute('hidden', '');
+    placeholderEl.setAttribute('hidden', '');
   }
 });
 
@@ -313,8 +332,14 @@ bootstrap().catch((err: unknown) => {
 });
 
 async function bootstrap(): Promise<void> {
-  const cases = await listCases();
-  sidebar.setCases(cases);
+  sidebar.setCasesLoading(true);
+  try {
+    const cases = await listCases();
+    sidebar.setCases(cases);
+  } catch (err) {
+    sidebar.setCasesLoading(false);
+    throw err;
+  }
 }
 
 async function handleLoadCase(id: string): Promise<void> {

@@ -319,5 +319,13 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     getLoadScale(): number {
       return scaleInput.valueAsNumber / 100;
     },
+    setCasesLoading(loading: boolean) {
+      cards.innerHTML = loading
+        ? Array(4).fill('<div class="case-card-skeleton"></div>').join('')
+        : '';
+    },
+    setSolveStale(stale: boolean) {
+      solveBtn.classList.toggle('stale', stale);
+    },
   };
 }
