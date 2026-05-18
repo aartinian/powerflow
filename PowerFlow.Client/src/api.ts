@@ -42,14 +42,20 @@ export async function validate(network: NetworkDto): Promise<ValidationResultDto
 
 // ── Solve ─────────────────────────────────────────────────────────────────
 
-export async function solve(request: SolveRequestDto): Promise<SolveResultDto> {
-  return postJsonExpectingValidation<SolveResultDto>('/api/solve', request);
+export async function solve(
+  request: SolveRequestDto,
+  signal?: AbortSignal,
+): Promise<SolveResultDto> {
+  return postJsonExpectingValidation<SolveResultDto>('/api/solve', request, signal);
 }
 
 // ── Contingency ───────────────────────────────────────────────────────────
 
-export async function contingency(request: SolveRequestDto): Promise<ContingencyResultDto[]> {
-  return postJsonExpectingValidation<ContingencyResultDto[]>('/api/contingency', request);
+export async function contingency(
+  request: SolveRequestDto,
+  signal?: AbortSignal,
+): Promise<ContingencyResultDto[]> {
+  return postJsonExpectingValidation<ContingencyResultDto[]>('/api/contingency', request, signal);
 }
 
 // ── Solve stream (SSE) ────────────────────────────────────────────────────
@@ -132,12 +138,18 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 // Variant for endpoints that return 422 + ValidationResultDto on structural
 // errors. Lets callers `try { … } catch (e) { if (e instanceof ApiValidationError) … }`.
-async function postJsonExpectingValidation<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
+async function postJsonExpectingValidation<T>(
+  url: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const init: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
-  });
+  };
+  if (signal) init.signal = signal;
+  const response = await fetch(url, init);
   if (response.status === 422) {
     const result = (await response.json()) as ValidationResultDto;
     throw new ApiValidationError(result);

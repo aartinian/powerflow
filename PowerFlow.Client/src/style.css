@@ -165,6 +165,26 @@ a:hover {
   gap: 0;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  position: relative;
+}
+#kpi-bar.stale .kpi-value {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: var(--warn);
+  text-decoration-thickness: 1px;
+}
+#kpi-bar.stale::after {
+  content: 'STALE — solve to refresh';
+  position: absolute;
+  top: 0.35rem;
+  right: 0.7rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 18%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
 }
 
 .kpi {
@@ -403,6 +423,11 @@ button.secondary {
   background: transparent;
   color: var(--accent);
 }
+button.danger {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--accent-fg);
+}
 button.mini {
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
@@ -480,6 +505,15 @@ button.mini {
 .result-badge.error {
   background: color-mix(in srgb, var(--error) 20%, transparent);
   color: var(--error);
+}
+.result-badge.warn {
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+}
+#result-block.stale .result-iter,
+#result-block.stale .result-mismatch {
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 .result-iter {
   font-family: var(--mono);

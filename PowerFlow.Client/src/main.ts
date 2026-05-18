@@ -142,13 +142,22 @@ const diagram = mountDiagram(diagramEl, (selection) => {
 fitBtn.addEventListener('click', () => diagram.resetView());
 
 let lastResult: SolveResultDto | null = null;
+let solveController: AbortController | null = null;
+let contingencyController: AbortController | null = null;
 
 const sidebar = mountSidebar(sidebarEl, {
   onLoadCase: handleLoadCase,
   onUploadCase: handleUploadCase,
   onSolve: handleSolve,
+  onCancelSolve: () => solveController?.abort(),
   onContingency: handleContingency,
+  onCancelContingency: () => contingencyController?.abort(),
 });
+
+function setStale(stale: boolean): void {
+  kpi.setStale(stale);
+  sidebar.setStale(stale);
+}
 
 network.subscribe((net, kind) => {
   sidebar.setSolveEnabled(net !== null);
@@ -160,8 +169,12 @@ network.subscribe((net, kind) => {
     editor.hide();
     sidebar.showResult(null);
     kpi.setResult(null);
+    setStale(false);
   } else if (net) {
     diagram.applyEdit(net);
+    // Any edit invalidates the displayed result — flag stale so the user
+    // can tell at a glance that KPIs / Result block reflect old numbers.
+    if (lastResult) setStale(true);
   }
   fitBtn.hidden = net === null;
   legendEl.hidden = net === null;
@@ -227,18 +240,21 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
   if (!base) return;
   const scale = sidebar.getLoadScale();
   const net = scaleLoads(base, scale);
+  const controller = new AbortController();
+  solveController = controller;
   sidebar.setSolveBusy(true);
   results.setStatus(scale === 1 ? 'Solving…' : `Solving at ${Math.round(scale * 100)}% load…`);
   try {
     const result =
       options.mode === 'AC'
-        ? await runAcStream(net, options)
-        : await solve({ network: net, options });
+        ? await runAcStream(net, options, controller.signal)
+        : await solve({ network: net, options }, controller.signal);
     lastResult = result;
     diagram.setSolveResult(result);
     results.showSolve(result);
     kpi.setResult(result);
     sidebar.showResult(result);
+    setStale(false);
     results.setStatus(
       result.converged
         ? `Converged in ${result.iterations} iteration(s).`
@@ -246,13 +262,16 @@ async function handleSolve(options: SolveOptionsDto): Promise<void> {
       result.converged ? 'ok' : 'error',
     );
   } catch (err) {
-    if (err instanceof ApiValidationError) {
+    if (controller.signal.aborted) {
+      results.setStatus('Solve cancelled.', 'muted');
+    } else if (err instanceof ApiValidationError) {
       results.showValidation(err.result);
       results.setStatus(`Validation failed (${err.result.errors.length} error(s))`, 'error');
     } else {
       results.setStatus(`Solve failed: ${String(err)}`, 'error');
     }
   } finally {
+    if (solveController === controller) solveController = null;
     sidebar.setSolveBusy(false);
   }
 }
@@ -262,11 +281,13 @@ async function handleContingency(options: SolveOptionsDto): Promise<void> {
   if (!base) return;
   const scale = sidebar.getLoadScale();
   const net = scaleLoads(base, scale);
+  const controller = new AbortController();
+  contingencyController = controller;
   sidebar.setContingencyBusy(true);
   const inSvc = net.branches.filter((b) => b.isInService).length;
   results.setStatus(`Running N-1 sweep over ${inSvc} branch(es)…`);
   try {
-    const rs = await contingency({ network: net, options });
+    const rs = await contingency({ network: net, options }, controller.signal);
     results.showContingency(rs);
     const worst = rs[0];
     if (!worst) {
@@ -283,13 +304,16 @@ async function handleContingency(options: SolveOptionsDto): Promise<void> {
       );
     }
   } catch (err) {
-    if (err instanceof ApiValidationError) {
+    if (controller.signal.aborted) {
+      results.setStatus('Sweep cancelled.', 'muted');
+    } else if (err instanceof ApiValidationError) {
       results.showValidation(err.result);
       results.setStatus(`Validation failed (${err.result.errors.length} error(s))`, 'error');
     } else {
       results.setStatus(`Sweep failed: ${String(err)}`, 'error');
     }
   } finally {
+    if (contingencyController === controller) contingencyController = null;
     sidebar.setContingencyBusy(false);
   }
 }
@@ -297,25 +321,30 @@ async function handleContingency(options: SolveOptionsDto): Promise<void> {
 async function runAcStream(
   net: NetworkDto,
   options: SolveOptionsDto,
+  signal: AbortSignal,
 ): Promise<SolveResultDto> {
   results.beginStream(options.tolerance);
   return new Promise<SolveResultDto>((resolve, reject) => {
     let settled = false;
-    solveStream({ network: net, options }, (event) => {
-      switch (event.type) {
-        case 'iter':
-          results.pushIteration(event.iter, event.mismatch, event.busTypeChanges);
-          break;
-        case 'result':
-          settled = true;
-          resolve(event.result);
-          break;
-        case 'error':
-          settled = true;
-          reject(new Error(event.message));
-          break;
-      }
-    }).then(
+    solveStream(
+      { network: net, options },
+      (event) => {
+        switch (event.type) {
+          case 'iter':
+            results.pushIteration(event.iter, event.mismatch, event.busTypeChanges);
+            break;
+          case 'result':
+            settled = true;
+            resolve(event.result);
+            break;
+          case 'error':
+            settled = true;
+            reject(new Error(event.message));
+            break;
+        }
+      },
+      signal,
+    ).then(
       () => {
         if (!settled) reject(new Error('Stream ended without a result event'));
       },

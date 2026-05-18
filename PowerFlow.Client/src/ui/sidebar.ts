@@ -4,7 +4,9 @@ export interface SidebarCallbacks {
   onLoadCase: (id: string) => void | Promise<void>;
   onUploadCase: (filename: string, content: string) => void | Promise<void>;
   onSolve: (options: SolveOptionsDto) => void | Promise<void>;
+  onCancelSolve: () => void;
   onContingency: (options: SolveOptionsDto) => void | Promise<void>;
+  onCancelContingency: () => void;
 }
 
 // One-line hints attached to each solver option as the native title=""
@@ -128,8 +130,10 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     }
   });
   const solveBtn = solveSection.querySelector<HTMLButtonElement>('#solve-btn')!;
+  let solveBusy = false;
   solveBtn.addEventListener('click', () => {
-    void callbacks.onSolve(readOptions());
+    if (solveBusy) callbacks.onCancelSolve();
+    else void callbacks.onSolve(readOptions());
   });
 
   // ── Result block (post-solve summary) ───────────────────────────────────
@@ -155,8 +159,10 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
     <button id="ctg-btn" class="secondary" disabled>Run N-1 sweep</button>
   `;
   const ctgBtn = contingencySection.querySelector<HTMLButtonElement>('#ctg-btn')!;
+  let ctgBusy = false;
   ctgBtn.addEventListener('click', () => {
-    void callbacks.onContingency(readOptions());
+    if (ctgBusy) callbacks.onCancelContingency();
+    else void callbacks.onContingency(readOptions());
   });
 
   container.append(caseSection, stressSection, solveSection, resultBlock, contingencySection);
@@ -206,12 +212,16 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
       ctgBtn.disabled = !enabled;
     },
     setSolveBusy(busy: boolean) {
-      solveBtn.disabled = busy;
-      solveBtn.textContent = busy ? 'Solving…' : 'Solve';
+      solveBusy = busy;
+      solveBtn.disabled = false;
+      solveBtn.textContent = busy ? 'Cancel' : 'Solve';
+      solveBtn.classList.toggle('danger', busy);
     },
     setContingencyBusy(busy: boolean) {
-      ctgBtn.disabled = busy;
-      ctgBtn.textContent = busy ? 'Running…' : 'Run N-1 sweep';
+      ctgBusy = busy;
+      ctgBtn.disabled = false;
+      ctgBtn.textContent = busy ? 'Cancel' : 'Run N-1 sweep';
+      ctgBtn.classList.toggle('danger', busy);
     },
     setBaseLoad(totalMw: number | null) {
       baseLoadMw = totalMw;
@@ -230,10 +240,18 @@ export function mountSidebar(container: HTMLElement, callbacks: SidebarCallbacks
         return;
       }
       resultBlock.hidden = false;
+      resultBlock.classList.remove('stale');
       resultBadge.textContent = r.converged ? 'Converged' : 'Diverged';
       resultBadge.className = `result-badge ${r.converged ? 'ok' : 'error'}`;
       resultIter.textContent = String(r.iterations);
       resultMismatch.textContent = `max |F| ${r.maxMismatch.toExponential(2)} pu`;
+    },
+    setStale(stale: boolean) {
+      resultBlock.classList.toggle('stale', stale && !resultBlock.hidden);
+      if (stale && !resultBlock.hidden) {
+        resultBadge.textContent = 'Stale';
+        resultBadge.className = 'result-badge warn';
+      }
     },
   };
 }

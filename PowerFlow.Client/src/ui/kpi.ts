@@ -4,6 +4,7 @@ export interface KpiHandle {
   reset(): void;
   setNetwork(net: NetworkDto | null): void;
   setResult(result: SolveResultDto | null): void;
+  setStale(stale: boolean): void;
 }
 
 // Compact at-a-glance stat bar above the diagram. Stays meaningful both
@@ -77,7 +78,12 @@ export function mountKpi(container: HTMLElement): KpiHandle {
   }
 
   function setResult(r: SolveResultDto | null): void {
-    if (!r) return;
+    if (!r) {
+      // Result-derived KPIs go back to '—' so the previous solve's numbers
+      // don't linger after a new case load or a network edit.
+      for (const k of ['gen', 'losses', 'vrange', 'maxload']) setText(k, '—');
+      return;
+    }
     if (r.balance) {
       setText('gen', `${r.balance.totalGenerationMw.toFixed(1)} MW`);
       setText('load', `${r.balance.totalLoadMw.toFixed(1)} MW`);
@@ -119,5 +125,12 @@ export function mountKpi(container: HTMLElement): KpiHandle {
   }
 
   reset();
-  return { reset, setNetwork, setResult };
+  return {
+    reset,
+    setNetwork,
+    setResult,
+    setStale(stale) {
+      container.classList.toggle('stale', stale);
+    },
+  };
 }
