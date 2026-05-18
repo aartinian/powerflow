@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>2.0.0</Version>
+    <Description>ASP.NET Core Minimal API for PowerFlow — stateless HTTP endpoints over PowerFlow.Core. Serves the PowerFlow.Client SPA from wwwroot.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PowerFlow.Core\PowerFlow.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Cases\*.m" />
+  </ItemGroup>
+</Project>
